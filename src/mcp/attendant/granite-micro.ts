@@ -238,7 +238,8 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
     const formatted = results
       .slice(0, 5) // Top 5 refs
       .map((r, i) => {
-        return `${i + 1}. **${r.from_repo}/${r.from_entity}** → **${r.to_repo}/${r.to_entity}**\n   Type: ${r.type}, Strength: ${r.strength.toFixed(2)}`;
+        const s = typeof r.strength === "number" ? r.strength.toFixed(2) : "N/A";
+        return `${i + 1}. **${r.from_repo}/${r.from_entity}** → **${r.to_repo}/${r.to_entity}**\n   Type: ${r.type}, Strength: ${s}`;
       })
       .join("\n\n");
 
