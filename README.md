@@ -1,189 +1,174 @@
-# Example GraphRAG with SQLite
+# GraphRAG with SQLite - TypeScript Edition
 
-This project is an example of GraphRAG, providing a system for processing documents, extracting entities and relationships, and managing them in a SQLite database. It leverages OpenAI's GPT models for natural language processing tasks and SQLite for database management.
+> **TypeScript implementation** of GraphRAG with SQLite, featuring multi-provider AI support and optional semantic search capabilities.
 
-## Project Structure
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue)](https://www.typescriptlang.org/)
+[![Node](https://img.shields.io/badge/Node.js-20+-green)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.txt)
 
-- `app.py`: Main application script that initializes components and runs the document processing and querying workflow.
-- `graph_manager.py`: Manages the SQLite database, including building and reprojecting the graph, calculating centrality measures, and managing graph operations.
-- `query_handler.py`: Handles user queries by leveraging the graph data and OpenAI's GPT models for natural language processing.
-- `document_processor.py`: Processes documents by splitting them into chunks, extracting entities and relationships, and summarizing them.
-- `graph_database.py`: Manages the connection to the SQLite database.
-- `logger.py`: Provides a logging utility to log messages to both console and file with configurable log levels.
+## 🎯 What is This?
 
-## Setup
+A knowledge graph RAG (Retrieval-Augmented Generation) system that:
+- Extracts entities and relationships from documents using LLMs
+- Builds a queryable knowledge graph in SQLite
+- Optionally adds semantic search via embeddings
+- Supports multiple AI providers (OpenAI, llama.cpp, and more)
 
-1. **Clone the repository:**
+Perfect for coding assistants, documentation search, and knowledge management.
 
-   ```sh
-   git clone git@github.com:stephenc222/example-graphrag-with-sqlite.git
-   cd example-graphrag-with-sqlite
-   ```
+## 📦 Quick Start
 
-2. **Install dependencies:**
+### TypeScript Implementation (This Repo)
 
-   ```sh
-   pip install -r requirements.txt
-   ```
+```bash
+# Install dependencies
+npm install
 
-3. **Set up environment variables:**
-   Create a `.env` file in the root directory and add the following variables:
+# Configure your AI provider
+cp .env.example .env
+# Edit .env with your provider settings
 
-   ```env
-   OPENAI_API_KEY=your_openai_api_key
-   DB_PATH=your_sqlite_db_path
-   LOG_LEVEL=INFO  # Optional, default is INFO
-   ```
+# Run the application
+npm run dev
 
-## Usage
-
-1. **Initialize the SQLite database:**
-
-   ```sh
-   python initialize_db.py
-   ```
-
-2. **Install the dependencies:**
-
-   ```sh
-   pip install -r requirements.txt
-   ```
-
-3. **Run the application:**
-
-   ```sh
-   python app.py
-   ```
-
-4. **Initial Indexing:**
-   The application will first index the initial set of documents defined in `constants.py` as `DOCUMENTS`.
-
-5. **Querying:**
-   After indexing, the application will handle a predefined query to extract themes from the documents. Centrality measures will also be calculated to enhance the query responses.
-
-6. **Reindexing with New Documents:**
-   The application will then add new documents defined in `constants.py` as `DOCUMENTS_TO_ADD_TO_INDEX` and reindex the graph.
-
-7. **Second Query:**
-   After reindexing, the application will handle another predefined query to extract themes from the updated set of documents.
-
-## Code Overview
-
-### `app.py`
-
-- **Overview**: Acts as the entry point of the application.
-- **Responsibilities**:
-  - Initializes the components: logger, document processor, graph manager, and query handler.
-  - Handles the main workflow:
-    1. Performs initial indexing of documents.
-    2. Executes a user query.
-    3. Reindexes the graph with new documents.
-    4. Runs a second user query based on the updated graph.
-  - Uses the logging utility to track the workflow progress.
-
-### `graph_manager.py`
-
-- **Overview**: Manages graph-related operations in the SQLite database.
-- **Responsibilities**:
-  - Builds the graph from document summaries.
-  - Reprojects the graph for community and centrality analysis.
-  - Performs calculations such as degree centrality, betweenness centrality, and closeness centrality.
-  - Supports reindexing with new documents and recalculating centrality measures.
-
-### `query_handler.py`
-
-- **Overview**: Handles natural language queries.
-- **Responsibilities**:
-  - Extracts answers from the graph using centrality measures.
-  - Uses OpenAI GPT models to provide concise answers based on graph data and centrality results.
-
-### `document_processor.py`
-
-- **Overview**: Manages the extraction and summarization of entities and relationships from documents.
-- **Responsibilities**:
-  - Splits documents into chunks.
-  - Extracts entities and relationships from the chunks using OpenAI GPT models.
-  - Summarizes the extracted entities and relationships for graph processing.
-
-### `graph_database.py`
-
-- **Overview**: Manages the SQLite database connection.
-- **Responsibilities**:
-  - Provides utility functions to connect to the SQLite database.
-  - Clears the database if necessary.
-
-### `logger.py`
-
-- **Overview**: Provides a logging utility for the application.
-- **Responsibilities**:
-  - Logs messages to both console and file.
-  - Supports configurable log levels via environment variables (`LOG_LEVEL`).
-  - Ensures logs are created in the correct format.
-
-## Centrality Measures and Their Importance
-
-Centrality measures help identify the most important nodes (entities) in a graph based on their structural properties. These measures help in identifying key themes and influential concepts in the documents.
-
-1. **Degree Centrality**: Measures how many connections a node has. Nodes with a high degree centrality are the most connected and can represent key topics or ideas in the document set.
-2. **Betweenness Centrality**: Identifies nodes that act as bridges between other nodes. Nodes with high betweenness centrality often represent concepts that connect different themes.
-3. **Closeness Centrality**: Measures how quickly a node can reach all other nodes. Entities with high closeness centrality are well-connected to all other entities and can be key summarizers or connectors of information.
-
-### Example Centrality Calculation:
-
-```python
-graph_manager = GraphManager(db_path)
-graph_manager.calculate_centrality_measures()
+# Or run embedding examples
+npm run examples:embedding
 ```
 
-## Example Query Workflow
+**📘 Full Documentation:** [README-TYPESCRIPT.md](README-TYPESCRIPT.md)
 
-1. **Initial Indexing**:
-   The system processes an initial set of documents, extracting entities and relationships, and storing them in a SQLite graph.
+### Original Python Implementation
 
-2. **Querying**:
-   A user query is handled by leveraging the centrality measures calculated from the graph, providing an intelligent answer using the OpenAI GPT model.
+The original Python implementation is preserved in [`reference/python-original/`](reference/python-original/) for reference.
 
-3. **Reindexing**:
-   The system reindexes the graph when new documents are added, recalculates the centrality measures, and processes another user query.
+## 🌟 Features
 
-### Sample Query Execution
+### Core GraphRAG
+- **Symbolic Knowledge Graph**: Extract entities and relationships via LLM prompting
+- **Centrality Analysis**: Identify key concepts using graph algorithms
+- **SQLite Storage**: Lightweight, portable graph database
+- **Query System**: Natural language queries with graph context
 
-```python
-query = "What are the main themes in these documents?"
-answer = query_handler.ask_question_with_centrality(query)
-print(f"Answer: {answer}")
+### TypeScript Enhancements
+- **Multi-Provider Support**: OpenAI, llama.cpp, Ollama, etc.
+- **Embedding Layer**: Optional semantic search (Granite, Nomic, BGE models)
+- **Type Safety**: Full TypeScript with strict mode
+- **Modern Tooling**: ESM, tsx for dev, tsup for builds
+- **Local-First**: Run entirely offline with llama.cpp + local embeddings
+
+## 🏗️ Architecture
+
+### Pure Graph (Original Approach)
+```
+Documents → LLM Extraction → Graph DB → Centrality Analysis → Answers
 ```
 
-## Logging
-
-Each component has its own logger, ensuring that log messages provide insight into the progress of document processing, graph operations, and query handling.
-
-The log level can be configured dynamically at runtime using the `LOG_LEVEL` environment variable.
-
-## Dependencies
-
-- `openai`: For interacting with OpenAI's GPT models.
-- `dotenv`: For loading environment variables from a `.env` file.
-- `sqlite3`: For interacting with the SQLite database.
-- `pickle`: For saving and loading processed data.
-- `logging`: For tracking the workflow progress across the application.
-
-## Exporting graph data for D3.js visualization
-
-After running `app.py` to populate the SQLite database, use the following command to export the graph data for D3.js visualization:
-
-```sh
-python export_graph_data.py data/graph_database.sqlite
+### Hybrid (New Option)
+```
+Documents → Chunking
+    ↓
+    ├─→ Embeddings → Semantic Search
+    │
+    └─→ LLM Extraction → Knowledge Graph
+         ↓
+    Combined Hybrid Queries
 ```
 
-Use a static file server to serve the `public` directory:
+**Learn more:** [docs/EMBEDDING-ARCHITECTURE.md](docs/EMBEDDING-ARCHITECTURE.md)
 
-```sh
-python -m http.server --directory public 8000
-```
+## 📚 Documentation
 
-Then navigate to `http://localhost:8000/` to view the graph visualization.
+| Document | Description |
+|----------|-------------|
+| [README-TYPESCRIPT.md](README-TYPESCRIPT.md) | Complete TypeScript setup and usage guide |
+| [docs/EMBEDDING-USAGE.md](docs/EMBEDDING-USAGE.md) | Embedding integration guide |
+| [docs/EMBEDDING-ARCHITECTURE.md](docs/EMBEDDING-ARCHITECTURE.md) | Symbolic vs. embedding approach explained |
+| [docs/HYBRID-ARCHITECTURE-PROPOSAL.md](docs/HYBRID-ARCHITECTURE-PROPOSAL.md) | Future hybrid system design |
+| [reference/python-original/](reference/python-original/) | Original Python implementation |
 
-## License
+## 🔧 Technology Stack
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE.txt) file for details.
+**Core:**
+- TypeScript 5.5+
+- Node.js 20+
+- better-sqlite3 (graph storage)
+- Vercel AI SDK (unified LLM interface)
+
+**AI Providers:**
+- `@ai-sdk/openai` - OpenAI GPT models
+- `llamacpp-ai-provider` - Local llama.cpp models
+- `@xenova/transformers` - Local embeddings
+
+**Optional:**
+- sqlite-vec (for vector search, planned)
+
+## 💡 Use Cases
+
+- **Coding Assistants**: Understand dependencies and relationships in codebases
+- **Documentation Search**: Semantic + structural queries over technical docs
+- **Knowledge Management**: Build queryable knowledge graphs from any text
+- **Research Tools**: Extract and explore entity relationships
+
+## 🎓 Credits & Attribution
+
+### Original Python Implementation
+
+This TypeScript version is based on the excellent Python implementation by **[stephenc222](https://github.com/stephenc222)**:
+
+- **Original Repository**: https://github.com/stephenc222/example-graphrag-with-sqlite
+- **Original Author**: stephenc222
+- **License**: MIT
+
+The Python version introduced the core GraphRAG architecture using:
+- Pure symbolic entity/relationship extraction
+- SQLite graph storage
+- Centrality-based query answering
+- No vector embeddings (graph-only approach)
+
+### TypeScript Conversion
+
+This TypeScript implementation:
+- Maintains the same MIT license
+- Preserves the original architecture
+- Adds multi-provider support and optional embeddings
+- Keeps the Python version in [`reference/python-original/`](reference/python-original/) for reference
+
+### Community Packages
+
+- **llamacpp-ai-provider**: Forked from [nnance/llamacpp-ai-provider](https://github.com/nnance/llamacpp-ai-provider)
+- **Vercel AI SDK**: By Vercel
+- **Transformers.js**: By Xenova
+
+## 🤝 Contributing
+
+Contributions welcome! This project aims to be a community resource for GraphRAG implementations.
+
+### Areas for Contribution
+- sqlite-vec integration
+- Additional AI provider support
+- Graph algorithm improvements
+- Documentation and examples
+- Performance optimizations
+
+## 📄 License
+
+MIT License - See [LICENSE.txt](LICENSE.txt)
+
+This project maintains the same MIT license as the original Python implementation by stephenc222.
+
+## 🔗 Related Projects
+
+- **Original Python Version**: https://github.com/stephenc222/example-graphrag-with-sqlite
+- **llamacpp-ai-provider**: https://github.com/nnance/llamacpp-ai-provider
+- **Vercel AI SDK**: https://sdk.vercel.ai/
+- **llama.cpp**: https://github.com/ggerganov/llama.cpp
+
+## 📞 Support
+
+- **Documentation**: See [README-TYPESCRIPT.md](README-TYPESCRIPT.md)
+- **Examples**: Run `npm run examples:embedding`
+- **Issues**: Open an issue on GitHub
+
+---
+
+**Ready to get started?** See [README-TYPESCRIPT.md](README-TYPESCRIPT.md) for full setup instructions.
