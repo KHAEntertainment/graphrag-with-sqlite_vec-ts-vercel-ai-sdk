@@ -64,18 +64,18 @@ export class GraphManager {
 
         // Process relationships
         else if (relationshipsSection && line.trim()) {
-          const parts = line.split('->');
-          if (parts.length >= 2) {
-            const source = this.normalizeEntityName(parts[0]?.trim() || '');
-            const target = this.normalizeEntityName(parts[parts.length - 1]?.trim() || '');
+          const parts = line.split('->').map(p => p.trim());
+          if (parts.length === 3) {
+            const source = this.normalizeEntityName(parts[0] || '');
+            const relationshipPart = parts[1] || '';
+            const target = this.normalizeEntityName(parts[2] || '');
 
-            const relationshipPart = parts[1]?.trim() || '';
             const relationName = this.sanitizeRelationshipName(
-              relationshipPart.split('[')[0]?.trim() || ''
+              (relationshipPart.split('[')[0] || '').trim()
             );
 
-            const strengthMatch = relationshipPart.match(/\[strength:\s*(\d\.\d)\]/);
-            const weight = strengthMatch ? parseFloat(strengthMatch[1] || '1.0') : 1.0;
+            const strengthMatch = relationshipPart.match(/\[strength:\s*([0-9]*\.?[0-9]+)\]/i);
+            const weight = strengthMatch ? parseFloat(strengthMatch[1] || '1') : 1.0;
 
             this.logger.debug(
               `Parsed relationship: ${source} -> ${relationName} -> ${target} [weight: ${weight}]`
@@ -91,6 +91,8 @@ export class GraphManager {
                 `Skipping relationship: ${source} -> ${relationName} -> ${target} (one or both entities not found)`
               );
             }
+          } else {
+            this.logger.warn('Skipping relationship with unexpected format:', line);
           }
         }
       }
