@@ -1,8 +1,23 @@
+# Environment
 .env
+
+# Python
 *.pkl
 __pycache__
 .mypy_cache
-data
-logs
+
+# Node.js / TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Data and logs
+data/
+logs/
 *.sqlite
+
+# JSON (except package.json and tsconfig.json)
 *.json
+!package.json
+!tsconfig.json
+!public/*.json
