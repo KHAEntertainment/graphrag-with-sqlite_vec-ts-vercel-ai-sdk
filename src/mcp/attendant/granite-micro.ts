@@ -212,7 +212,10 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
     const formatted = results
       .slice(0, 10) // Top 10 results
       .map((r, i) => {
-        const props = Object.entries(r.properties)
+        const rawProps = typeof r.properties === "string"
+          ? ((): Record<string, unknown> => { try { return JSON.parse(r.properties); } catch { return {}; } })()
+          : (r.properties ?? {});
+        const props = Object.entries(rawProps as Record<string, unknown>)
           .slice(0, 3)
           .map(([k, v]) => `${k}: ${v}`)
           .join(", ");
