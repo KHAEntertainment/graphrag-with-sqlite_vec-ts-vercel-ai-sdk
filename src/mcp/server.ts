@@ -708,7 +708,7 @@ export class GraphRAGMCPServer {
         .map(
           (ref) =>
             `- **${ref.from_repo}/${ref.from_entity}** → **${ref.to_repo}/${ref.to_entity}**\n` +
-            `  Type: ${ref.type}, Strength: ${ref.strength.toFixed(2)}`
+            `  Type: ${ref.type}, Strength: ${typeof ref.strength === "number" ? ref.strength.toFixed(2) : "N/A"}`
         )
         .join("\n\n");
 

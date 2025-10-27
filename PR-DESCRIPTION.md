@@ -131,9 +131,11 @@ All new documentation:
 - Python version preserved in `reference/python-original/`
 - Proper credit in README and documentation
 
-## ⚠️ Breaking Changes
+## ⚠️ Known Limitations
 
-**None** - This is a complete rewrite in a different language. The Python implementation remains available and functional in `reference/python-original/`.
+- **Gemini 2.5 Pro Integration**: Currently a placeholder that delegates to Granite Micro with logging. Full Gemini API integration is planned for future development.
+- **Runtime Testing**: Requires model downloads for full testing
+- **sqlite-vec Integration**: Planned enhancement for vector search optimization
 
 ## 🔄 Migration Guide
 
