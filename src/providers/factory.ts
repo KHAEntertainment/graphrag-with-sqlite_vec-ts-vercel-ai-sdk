@@ -13,14 +13,20 @@ import type { ProviderConfig } from './config.js';
 export function createLanguageModel(config: ProviderConfig): LanguageModelV1 {
   switch (config.type) {
     case 'openai': {
-      const model = openai(config.model || 'gpt-4o');
-      return model as unknown as LanguageModelV1;
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY is not set');
+      }
+      const model: LanguageModelV1 = openai(config.model || 'gpt-4o');
+      return model;
     }
 
     case 'llamacpp': {
+      if (!config.modelPath) {
+        throw new Error('llamacpp provider requires modelPath in config');
+      }
       const llamacpp = new LLamaCpp(config.modelPath);
-      const model = llamacpp.completion();
-      return model as unknown as LanguageModelV1;
+      const model = llamacpp.completion() as LanguageModelV1;
+      return model;
     }
 
     default: {
