@@ -2,6 +2,15 @@
  * Query Analyzer - LLM-based Query Classification
  *
  * Analyzes natural language queries to determine optimal search strategy weights
+ * for dynamic hybrid search (dense, sparse, pattern, graph).
+ *
+ * Recommended Models:
+ * - Query Analysis: IBM Granite 3.1 (2B-8B) - excellent at classifying query intent
+ * - Triple Extraction: SciPhi/Triplex (3.8B) - for building KG from code/docs
+ * - Embeddings: IBM Granite Embedding (125M-278M) - for vectorizing entities & edges
+ * - Advanced Reasoning: TIGER-Lab/StructLM-7B (optional) - for graph inference
+ *
+ * See: docs/SQLITE-VEC-INTEGRATION-PLAN.md#model-recommendations
  */
 
 import { generateObject } from 'ai';

@@ -76,6 +76,37 @@ Documents → Chunking
 
 **Learn more:** [docs/EMBEDDING-ARCHITECTURE.md](docs/EMBEDDING-ARCHITECTURE.md)
 
+## 🤖 Recommended Models
+
+Based on extensive research, these models provide optimal performance for GraphRAG:
+
+### Triple Extraction
+- **[SciPhi/Triplex](https://huggingface.co/SciPhi/Triplex)** (Phi-3 3.8B finetune)
+  - Best for extracting knowledge graph triples [subject, predicate, object] from code/docs
+  - Fine-tuned specifically for KG construction
+  - Efficient on consumer hardware
+
+### Embeddings
+- **IBM Granite Embedding** (125M-278M)
+  - Optimized for code and technical documentation
+  - Use for both entity and edge embeddings
+  - Entity format: `"name :: kind :: hints"`
+  - Edge format: `"S <predicate> O :: context:..."`
+  - Enables similarity search for entities AND relationships
+
+### Query Analysis (Current)
+- **IBM Granite 3.1** (2B-8B)
+  - Powers dynamic hybrid search query classification
+  - Determines optimal search strategy weights
+
+### Optional: Advanced Reasoning
+- **[TIGER-Lab/StructLM-7B](https://huggingface.co/TIGER-Lab/StructLM-7B)** (Q4 quantized)
+  - Use AFTER building KG with Triplex
+  - Infers missing links and answers complex graph queries
+  - Runs on MacBook Pro with quantization
+
+**Full details:** [docs/SQLITE-VEC-INTEGRATION-PLAN.md](docs/SQLITE-VEC-INTEGRATION-PLAN.md#model-recommendations)
+
 ## 📚 Documentation
 
 | Document | Description |

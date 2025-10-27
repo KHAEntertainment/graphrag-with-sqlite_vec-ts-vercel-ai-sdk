@@ -62,14 +62,15 @@ CREATE TABLE cross_references (
 );
 
 -- 5. Embeddings (sqlite-vec virtual table)
+-- Stores both entity and edge embeddings for semantic search
 CREATE VIRTUAL TABLE embeddings USING vec0(
-  chunk_id TEXT PRIMARY KEY,        -- "vercel/ai::chunk::123"
+  chunk_id TEXT PRIMARY KEY,        -- "vercel/ai::entity::123" or "vercel/ai::edge::456"
   repo TEXT,                        -- "vercel/ai"
-  entity_id TEXT,                   -- "vercel/ai::StreamingTextResponse" (nullable)
-  chunk_type TEXT,                  -- "documentation", "code", "comment"
-  content TEXT,                     -- Original text
-  embedding FLOAT[768],             -- Granite Embedding 125M
-  metadata TEXT                     -- JSON: {file, line, etc}
+  entity_id TEXT,                   -- "vercel/ai::StreamingTextResponse" (for entities, nullable for edges)
+  chunk_type TEXT,                  -- "entity", "edge", "documentation", "code", "comment"
+  content TEXT,                     -- Formatted text: "name :: kind :: hints" or "S <pred> O :: context:..."
+  embedding FLOAT[768],             -- Granite Embedding (768 for 125M, 1024 for 278M)
+  metadata TEXT                     -- JSON: {subject, predicate, object, file, line, etc}
 );
 
 -- Indexes for performance
@@ -82,6 +83,197 @@ CREATE INDEX idx_cross_refs_to ON cross_references(to_repo, to_entity);
 CREATE INDEX idx_embeddings_repo ON embeddings(repo);
 CREATE INDEX idx_embeddings_entity ON embeddings(entity_id);
 ```
+
+## Model Recommendations
+
+### Triple Extraction: Triplex (Phi-3 3.8B Finetune)
+
+**Model:** [SciPhi/Triplex](https://huggingface.co/SciPhi/Triplex)
+
+**Purpose:** Extract knowledge graph triples [subject, predicate, object] from code and documentation
+
+**Why Triplex:**
+- Fine-tuned Phi-3 3.8B specifically for knowledge graph extraction
+- Excellent at extracting structured relationships from unstructured text
+- Produces high-quality [s,p,o] triples with contextual information
+- Runs efficiently on consumer hardware
+- Strong understanding of code structure and documentation patterns
+
+**Usage Pattern:**
+```typescript
+// Extract triples from code/docs
+const triples = await triplexExtractor.extract(codeText);
+// Returns: [
+//   { subject: "StreamingTextResponse", predicate: "extends", object: "Response", context: "..." },
+//   { subject: "useChat", predicate: "returns", object: "ChatState", context: "..." }
+// ]
+```
+
+**Integration Point:** Phase 2.1 - Repository Indexer (src/lib/repository-indexer.ts)
+
+### Embeddings: Granite Embedding Models
+
+**Model Family:** IBM Granite Embedding (125M - 278M parameters)
+
+**Purpose:** Vectorize both entities and relationships for semantic search and similarity clustering
+
+**Why Granite:**
+- Optimized for code and technical documentation
+- Multiple sizes available (125M for efficiency, 278M for accuracy)
+- Strong performance on code similarity tasks
+- Efficient inference on CPU and GPU
+- Good balance of quality and resource usage
+
+**Embedding Strategy:**
+
+1. **Entity Embeddings:**
+   ```typescript
+   // Format: "name :: kind :: hints"
+   const entityText = `${entity.name} :: ${entity.type} :: ${entity.description}`;
+   const embedding = await granite.embed(entityText);
+   // Store in embeddings table with entity_id
+   ```
+
+2. **Edge Embeddings:**
+   ```typescript
+   // Format: "S <predicate> O :: context:..."
+   const edgeText = `${subject} <${predicate}> ${object} :: context: ${contextSnippet}`;
+   const embedding = await granite.embed(edgeText);
+   // Store in embeddings table for relationship similarity
+   ```
+
+**Benefits of Dual Embedding:**
+- **Find similar entities:** "What's similar to StreamingTextResponse?"
+- **Find similar relations:** "What other patterns are like 'useChat returns ChatState'?"
+- **Hybrid graph expansion:** Combine graph traversal with semantic similarity
+- **Cross-repository linking:** Discover similar concepts across different codebases
+
+**Vector Dimensions:**
+- Granite 125M: 768 dimensions (default, good balance)
+- Granite 278M: 1024 dimensions (higher accuracy, more storage)
+
+**Storage in sqlite-vec:**
+```sql
+-- Both entities and edges stored in same vec0 table
+CREATE VIRTUAL TABLE embeddings USING vec0(
+  chunk_id TEXT PRIMARY KEY,        -- "repo::entity::id" or "repo::edge::id"
+  repo TEXT,
+  entity_id TEXT,                   -- Points to node ID for entities
+  chunk_type TEXT,                  -- "entity", "edge", "documentation", "code"
+  content TEXT,                     -- Original formatted text
+  embedding FLOAT[768],             -- Granite embedding
+  metadata TEXT                     -- JSON: {subject, predicate, object, etc}
+);
+```
+
+### Optional: StructLM-7B for Advanced Reasoning
+
+**Model:** [TIGER-Lab/StructLM-7B](https://huggingface.co/TIGER-Lab/StructLM-7B)
+
+**Quantization:** Q4_K_M (4-5GB, runs on MacBook Pro)
+
+**Purpose:** Reasoning over existing knowledge graphs (post-construction)
+
+**Why StructLM:**
+- Strong at structured data reasoning: tables, schemas, KG question answering
+- Can infer missing links in the graph
+- Answer complex queries over graph structure
+- Better graph reasoning than general LLMs
+
+**When to Use:**
+- **After** Triplex builds your initial KG
+- For complex queries: "Which repos share an API schema with X?"
+- For link prediction: "What relationships might exist between A and B?"
+- For graph completion: "What connections are we missing?"
+
+**Usage Pattern:**
+```typescript
+// After KG is built with Triplex
+const query = "Which repositories share authentication patterns with vercel/ai?";
+
+// StructLM reasons over the graph structure
+const reasoning = await structLM.reason({
+  graph: existingKG,
+  query: query,
+  mode: "inference" // or "completion", "question_answering"
+});
+
+// Returns inferred connections and explanations
+```
+
+**Performance Notes:**
+- Quantized Q4_K_M: 4-5GB RAM
+- Slower than Triplex but still reasonable on M-series MacBooks
+- Best used for occasional complex queries, not real-time retrieval
+- Can run in background for batch link inference
+
+**Integration Point:** Optional enhancement to Phase 3 - CLI Tool (reasoning command)
+
+### Recommended Architecture Pattern
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Code/Documentation                      │
+└───────────────────────────────┬─────────────────────────────┘
+                                │
+                    ┌───────────▼────────────┐
+                    │  Triplex Extractor     │
+                    │  (Phi-3 3.8B finetune) │
+                    └───────────┬────────────┘
+                                │
+                    [subject, predicate, object] + context
+                                │
+                ┌───────────────┴────────────────┐
+                │                                │
+        ┌───────▼────────┐            ┌─────────▼────────┐
+        │  Granite Embed  │            │  Granite Embed   │
+        │  (Entities)     │            │  (Edges)         │
+        └───────┬─────────┘            └─────────┬────────┘
+                │                                │
+        "name :: kind"               "S <pred> O :: ctx"
+                │                                │
+                └────────────┬───────────────────┘
+                             │
+                    ┌────────▼─────────┐
+                    │  sqlite-vec      │
+                    │  (vec0 table)    │
+                    └────────┬─────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+┌───────▼────────┐  ┌────────▼────────┐  ┌──────▼──────┐
+│ Entity Search  │  │ Edge Search     │  │  Graph      │
+│ "similar to X" │  │ "similar rels"  │  │  Traversal  │
+└────────────────┘  └─────────────────┘  └─────────────┘
+        │                    │                    │
+        └────────────────────┼────────────────────┘
+                             │
+                    ┌────────▼─────────┐
+                    │  Hybrid Results  │
+                    │  (RRF Fusion)    │
+                    └──────────────────┘
+                             │
+                (Optional: StructLM reasoning)
+                             │
+                    ┌────────▼─────────┐
+                    │  Final Answer    │
+                    └──────────────────┘
+```
+
+### Model Selection Summary
+
+| Task | Model | Size | Purpose |
+|------|-------|------|---------|
+| **Triple Extraction** | SciPhi/Triplex | 3.8B | Extract [s,p,o] from code/docs |
+| **Embeddings** | IBM Granite | 125M-278M | Vectorize entities and edges |
+| **Query Analysis** | IBM Granite 3.1 2B/8B | 2B-8B | Classify query types for hybrid search |
+| **Reasoning (Optional)** | TIGER-Lab/StructLM-7B | 7B (Q4) | Infer missing links, complex queries |
+
+**Resource Requirements:**
+- **Minimum (CPU):** Triplex (3.8B) + Granite Embedding (125M) = ~4-5GB RAM
+- **Recommended (CPU):** + Granite 3.1 2B for query analysis = ~6-7GB RAM
+- **Full Stack (CPU):** + StructLM-7B Q4 = ~10-12GB RAM
+- **GPU:** All models run significantly faster with CUDA/Metal acceleration
 
 ## Implementation Plan
 

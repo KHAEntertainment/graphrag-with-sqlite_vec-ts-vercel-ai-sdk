@@ -8,6 +8,24 @@ Get your MCP server running with Claude Desktop in 5 minutes!
 - Claude Desktop installed
 - A project with indexed GraphRAG data (`.graphrag/database.sqlite`)
 
+## Recommended Models
+
+For optimal GraphRAG performance, use these specialized models:
+
+| Purpose | Model | Size | Notes |
+|---------|-------|------|-------|
+| **Triple Extraction** | [SciPhi/Triplex](https://huggingface.co/SciPhi/Triplex) | 3.8B | Extract KG triples from code/docs |
+| **Embeddings** | IBM Granite Embedding | 125M-278M | Vectorize entities & edges |
+| **Query Analysis** | IBM Granite 3.1 | 2B-8B | Powers dynamic hybrid search |
+| **Reasoning (Optional)** | [StructLM-7B](https://huggingface.co/TIGER-Lab/StructLM-7B) | 7B (Q4) | Graph inference & link prediction |
+
+**Key Pattern:**
+- **Entities**: Embed as `"name :: kind :: hints"` → sqlite-vec
+- **Edges**: Embed as `"S <predicate> O :: context:..."` → sqlite-vec
+- Enables similarity search for both entities AND relationships
+
+**Full details:** [SQLITE-VEC-INTEGRATION-PLAN.md](SQLITE-VEC-INTEGRATION-PLAN.md#model-recommendations)
+
 ## Step 1: Build the MCP Server
 
 ```bash

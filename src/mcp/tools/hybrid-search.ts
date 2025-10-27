@@ -9,6 +9,14 @@
  *
  * Uses LLM-based query analysis to dynamically weight strategies
  * and Reciprocal Rank Fusion to combine results.
+ *
+ * Embedding Pattern (when sqlite-vec integrated):
+ * - Entities: "name :: kind :: hints" → Granite Embedding → vec0
+ * - Edges: "S <predicate> O :: context:..." → Granite Embedding → vec0
+ * - Enables similarity search for both entities AND relationships
+ * - Use SciPhi/Triplex for extracting triples from code/docs
+ *
+ * See: docs/SQLITE-VEC-INTEGRATION-PLAN.md#model-recommendations
  */
 
 import type { Database } from 'better-sqlite3';

@@ -1,5 +1,19 @@
 /**
  * Graph database connection and management using SQLite
+ *
+ * Database includes:
+ * - nodes: Graph entities
+ * - edges: Graph relationships
+ * - chunks: Text content for hybrid search (FTS5 + trigram)
+ * - chunks_fts: Full-text search index (BM25)
+ * - chunks_trigram: Fuzzy matching with Levenshtein distance
+ *
+ * Future: sqlite-vec integration for entity & edge embeddings
+ * - Entities: "name :: kind :: hints" → Granite Embedding
+ * - Edges: "S <predicate> O :: context:..." → Granite Embedding
+ * - Triple extraction via SciPhi/Triplex
+ *
+ * See: docs/SQLITE-VEC-INTEGRATION-PLAN.md
  */
 
 import Database from 'better-sqlite3';
