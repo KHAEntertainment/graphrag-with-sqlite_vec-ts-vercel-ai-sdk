@@ -651,6 +651,7 @@ async function readDocuments(path: string): Promise<string[]> {
   const documents: string[] = [];
 
   // Read markdown and text files recursively
+  // Note: { recursive: true } requires Node.js v18.17.0+ or v20.1.0+
   const files = await readdir(path, { recursive: true, withFileTypes: true });
 
   for (const file of files) {
@@ -753,6 +754,7 @@ src/
 └── types/
     └── index.ts                  (UPDATED - add new types)
 ```
+
 
 ## Dependencies to Add
 

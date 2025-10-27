@@ -7,7 +7,12 @@
 
 import { generateText } from "ai";
 import type { LanguageModelV1 } from "ai";
-import type { CombinedResults } from "../tools/query-engine.js";
+import type {
+  CombinedResults,
+  SemanticResult,
+  GraphResult,
+  CrossReference
+} from "../tools/query-engine.js";
 import { Logger } from "../../lib/logger.js";
 
 /**
@@ -71,6 +76,7 @@ export class GraniteAttendant {
       );
       return this.formatRawResults(options);
     }
+    const model = this.model;
 
     const {
       query,
@@ -93,7 +99,7 @@ export class GraniteAttendant {
 
     try {
       const response = await generateText({
-        model: this.model,
+        model,
         prompt,
         temperature: 0.3, // Lower temperature for more focused responses
         maxTokens: maxTokens + 100, // Add buffer for formatting
@@ -186,7 +192,7 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
   /**
    * Format semantic search results
    */
-  private formatSemanticResults(results: any[]): string {
+  private formatSemanticResults(results: SemanticResult[]): string {
     if (results.length === 0) {
       return "**Semantic Search:** No results";
     }
@@ -194,7 +200,9 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
     const formatted = results
       .slice(0, 10) // Top 10 results
       .map((r, i) => {
-        return `${i + 1}. **${r.repo}** (similarity: ${(1 - r.distance).toFixed(2)})\n   ${r.content.slice(0, 200)}${r.content.length > 200 ? "..." : ""}`;
+        const sim = typeof r.distance === "number" ? (1 - r.distance).toFixed(2) : "N/A";
+        const text = typeof r.content === "string" ? r.content : JSON.stringify(r.content ?? "");
+        return `${i + 1}. **${r.repo}** (similarity: ${sim})\n   ${text.slice(0, 200)}${text.length > 200 ? "..." : ""}`;
       })
       .join("\n\n");
 
@@ -204,7 +212,7 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
   /**
    * Format graph query results
    */
-  private formatGraphResults(results: any[]): string {
+  private formatGraphResults(results: GraphResult[]): string {
     if (results.length === 0) {
       return "**Graph Query:** No results";
     }
@@ -230,7 +238,7 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
   /**
    * Format cross-repository references
    */
-  private formatCrossReferences(results: any[]): string {
+  private formatCrossReferences(results: CrossReference[]): string {
     if (results.length === 0) {
       return "**Cross-Repository References:** None found";
     }
@@ -253,16 +261,16 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
     const repos = new Set<string>();
 
     for (const r of results.semantic) {
-      repos.add(r.repo);
+      if (typeof r.repo === "string" && r.repo) repos.add(r.repo);
     }
 
     for (const r of results.graph) {
-      repos.add(r.repo);
+      if (typeof r.repo === "string" && r.repo) repos.add(r.repo);
     }
 
     for (const r of results.crossRefs) {
-      repos.add(r.from_repo);
-      repos.add(r.to_repo);
+      if (typeof r.from_repo === "string" && r.from_repo) repos.add(r.from_repo);
+      if (typeof r.to_repo === "string" && r.to_repo) repos.add(r.to_repo);
     }
 
     return Array.from(repos);
