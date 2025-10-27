@@ -28,7 +28,7 @@ This creates `dist/mcp/server.js`.
 ```
 
 **Windows:**
-```
+```text
 %APPDATA%\Claude\claude_desktop_config.json
 ```
 
@@ -53,6 +53,8 @@ Edit the config file and add:
 }
 ```
 
+**Note:** GRAPHRAG_DB_PATH resolves relative to cwd. Use an absolute path if your DB isn't under the project root.
+
 **Replace:**
 - `/Users/you/example-graphrag-with-sqlite/` → Path to this repo
 - `/Users/you/my-project` → Path to your project (where `.graphrag/` is)
@@ -67,7 +69,7 @@ In Claude Desktop, try these queries:
 
 ### List Indexed Repositories
 
-```
+```text
 What repositories are indexed?
 ```
 
@@ -75,7 +77,7 @@ Claude will use the `list_repositories` tool.
 
 ### Query a Repository
 
-```
+```text
 How do I use streaming with Vercel AI SDK?
 ```
 
@@ -83,7 +85,7 @@ Claude will use `query_repositories` or `smart_query`.
 
 ### Find Cross-References
 
-```
+```text
 What projects use StreamingTextResponse?
 ```
 
@@ -127,6 +129,7 @@ For Gemini escalation:
 
 ```bash
 GEMINI_API_KEY=your-api-key-here
+# Do not commit real keys. Prefer OS env vars or a local, git-ignored .env.
 ```
 
 ## Next Steps
@@ -140,7 +143,7 @@ GEMINI_API_KEY=your-api-key-here
 
 Once you have repositories indexed:
 
-```
+```text
 # Simple fact lookup
 "Show me how to import streamText from Vercel AI SDK"
 
@@ -201,6 +204,10 @@ For testing during development:
 ```bash
 # Run MCP server directly
 GRAPHRAG_DB_PATH=.graphrag/database.sqlite npm run mcp:dev
+# Windows (cmd)
+set GRAPHRAG_DB_PATH=.graphrag\database.sqlite && npm run mcp:dev
+# Windows (PowerShell)
+$env:GRAPHRAG_DB_PATH=".graphrag\database.sqlite"; npm run mcp:dev
 ```
 
 ## What's Different from Other MCP Servers?

@@ -111,7 +111,7 @@ interface CrossReference {
 
 ### Example: Vercel AI SDK + AG-UI + CoPilotKit Index
 
-```typescript
+```json
 {
   repositories: [
     {
@@ -212,7 +212,7 @@ async function selectAttendant(
 
 ### 1. `query_repositories` (Multi-Repo Query)
 
-```typescript
+```json
 {
   name: "query_repositories",
   description: "Query across multiple repositories with semantic + graph search",
@@ -247,7 +247,7 @@ async function selectAttendant(
 
 ### 2. `query_integration` (Cross-Project Integration)
 
-```typescript
+```json
 {
   name: "query_integration",
   description: "Understand how multiple projects integrate together",
@@ -278,7 +278,7 @@ async function selectAttendant(
 
 ### 3. `smart_query` (Natural Language with Auto-Escalation)
 
-```typescript
+```json
 {
   name: "smart_query",
   description: "Ask any question - automatically selects attendant and strategy",
@@ -306,7 +306,7 @@ async function selectAttendant(
 
 ### 4. `get_cross_references` (Cross-Project Dependencies)
 
-```typescript
+```json
 {
   name: "get_cross_references",
   description: "Find how projects reference each other",

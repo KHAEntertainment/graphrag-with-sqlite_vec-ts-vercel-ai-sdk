@@ -287,6 +287,8 @@ The `smart_query` tool automatically selects the best attendant based on:
 - Set `GEMINI_API_KEY` environment variable
 - Incurs API costs (but only when used)
 
+> **Note:** Gemini attendant is not yet implemented; when selected, results are formatted using the Granite attendant until API wiring is added.
+
 ### `none`
 
 - **Use for:** Getting raw results without filtering

@@ -134,11 +134,12 @@ export class QueryEngine {
           vec_distance_cosine(embedding, ?) as distance,
           metadata
         FROM embeddings
-        WHERE distance < ?
+        WHERE vec_distance_cosine(embedding, ?) < ?
       `;
 
       const params: any[] = [
         JSON.stringify(queryEmbedding),
+        JSON.stringify(queryEmbedding), // Repeat for WHERE clause
         1 - minSimilarity, // Convert similarity to distance
       ];
 

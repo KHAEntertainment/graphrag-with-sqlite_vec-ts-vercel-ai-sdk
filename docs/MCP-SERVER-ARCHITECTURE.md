@@ -294,7 +294,7 @@ interface TieredResponse {
 Standard query: GraphRAG (50-200ms) + Attendant (200-500ms) = 250-700ms
 Without attendant: GraphRAG only = 50-200ms
 
-Tradeoff: Slightly slower, but much more useful results
+Trade‑off: Slightly slower, but much more useful results
 ```
 
 **Cost:**
@@ -315,7 +315,7 @@ Total: $0 per query (100% local!)
 
 ### High-Level Flow
 
-```
+```text
 ┌─────────────────────────────────────────────┐
 │         Coding Agent (Claude/GPT-4)         │
 │         "What uses the logger?"             │

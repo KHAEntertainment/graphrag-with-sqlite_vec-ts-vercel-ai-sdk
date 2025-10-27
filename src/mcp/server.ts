@@ -19,6 +19,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { pathToFileURL } from "url";
 import { GraphDatabaseConnection } from "../lib/graph-database.js";
 import { Logger } from "../lib/logger.js";
 import { QueryEngine } from "./tools/query-engine.js";
@@ -541,7 +542,7 @@ export class GraphRAGMCPServer {
             text:
               filtered.answer +
               `\n\n---\n*Repositories: ${filtered.repositories.join(", ")}*\n` +
-              `*Efficiency: ${filtered.efficiency.originalTokens} → ${filtered.efficiency.filteredTokens} tokens (${filtered.efficiency.reductionPercent}% reduction)*\n` +
+              `*Efficiency: ${filtered.efficiency.originalTokens} → ${filtered.efficiency.filteredTokens} tokens (${isNaN(filtered.efficiency.reductionPercent) || !isFinite(filtered.efficiency.reductionPercent) ? 'N/A' : filtered.efficiency.reductionPercent + '%'} reduction)*\n` +
               `*Attendant: ${attendantMode}*`,
           },
         ],
@@ -628,7 +629,7 @@ export class GraphRAGMCPServer {
       const filtered = await attendant.filter({
         query: `Find information about ${dependency} (aspect: ${aspect})`,
         results: combined,
-        maxTokens: 500,
+        maxTokens: args.maxTokens || 500,
       });
 
       return {
@@ -825,7 +826,7 @@ export class GraphRAGMCPServer {
             text:
               filtered.answer +
               `\n\n---\n*Repositories: ${filtered.repositories.join(", ")}*\n` +
-              `*Efficiency: ${filtered.efficiency.originalTokens} → ${filtered.efficiency.filteredTokens} tokens (${filtered.efficiency.reductionPercent}% reduction)*\n` +
+              `*Efficiency: ${filtered.efficiency.originalTokens} → ${filtered.efficiency.filteredTokens} tokens (${isNaN(filtered.efficiency.reductionPercent) || !isFinite(filtered.efficiency.reductionPercent) ? 'N/A' : filtered.efficiency.reductionPercent + '%'} reduction)*\n` +
               `*Attendant: ${attendantMode}${args.forceAttendant ? " (forced)" : " (auto-selected)"}*`,
           },
         ],
@@ -960,7 +961,7 @@ export class GraphRAGMCPServer {
 /**
  * Main entry point when run directly
  */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const config: GraphRAGMCPConfig = {
     dbPath: process.env.GRAPHRAG_DB_PATH || ".graphrag/database.sqlite",
     defaultAttendant:

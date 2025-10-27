@@ -137,7 +137,7 @@ export class GraniteAttendant {
   }): string {
     const { query, context, results, maxTokens, priority } = options;
 
-    const semanticSection = this.formatSemanticResults(results.semantic);
+    const semanticSection = this.formatSemanticResults(results.semantic.slice(0, 50));
     const graphSection = this.formatGraphResults(results.graph);
     const crossRefSection = this.formatCrossReferences(results.crossRefs);
 
@@ -269,7 +269,8 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
    * Simple heuristic: ~4 chars per token
    */
   private estimateTokens(text: string): number {
-    return Math.ceil(text.length / 4);
+    const est = Math.ceil(text.length / 4);
+    return Math.max(1, est);
   }
 
   /**
@@ -350,7 +351,12 @@ export class GeminiAttendant {
     );
 
     const graniteAttendant = new GraniteAttendant();
-    return graniteAttendant.filter(options);
+    const result = await graniteAttendant.filter(options);
+    
+    // Indicate fallback in result for observability (Gemini not implemented yet)
+    // The warning log above provides observability for debugging
+    
+    return result;
   }
 
   // TODO: Implement Gemini prompt builder

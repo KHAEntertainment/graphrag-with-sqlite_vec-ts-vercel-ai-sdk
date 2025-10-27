@@ -4,7 +4,7 @@
 
 ### Data Flow (Local-First)
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Initial Indexing (Once)                      │
 └─────────────────────────────────────────────────────────────────┘
@@ -64,7 +64,7 @@
 
 The MCP server operates on **already-indexed repositories** for the current project:
 
-```typescript
+```json
 // Project structure
 my-project/
 ├── .graphrag/
@@ -176,7 +176,7 @@ CREATE TABLE cross_references (
 CREATE VIRTUAL TABLE embeddings USING vec0(
   chunk_id TEXT PRIMARY KEY,
   repo TEXT,              -- Which repository
-  embedding FLOAT[768],   -- Granite Embedding 125M dimension
+  embedding float[768],   -- Granite Embedding 125M dimension
   content TEXT,
   metadata TEXT
 );
@@ -473,7 +473,7 @@ export class QueryRepositoriesTool {
 ## Advantages of Local-First Architecture
 
 ### 1. **Performance**
-```
+```text
 GitHub API query: 200-1000ms
 Local SQLite query: 5-20ms
 Speed improvement: 10-50x faster
@@ -495,7 +495,7 @@ Speed improvement: 10-50x faster
 - Attendant: Local Granite Micro (free) or optional Gemini API
 
 ### 5. **Speed**
-```
+```text
 Traditional RAG (API-based):
 - Embedding generation: 100ms (API)
 - Vector search: 50ms (Pinecone/etc)
