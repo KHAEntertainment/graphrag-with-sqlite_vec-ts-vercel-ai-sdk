@@ -182,6 +182,10 @@ async function example5_HybridApproach(llmModel: LanguageModelV1) {
   await embeddingProvider.initialize();
   const embeddingManager = new EmbeddingManager(embeddingProvider, logger);
 
+  // Ensure DB directory exists before opening file
+  if (!existsSync('data')) {
+    mkdirSync('data', { recursive: true });
+  }
   const dbConnection = new GraphDatabaseConnection('data/example_hybrid.sqlite');
   const graphManager = new GraphManager(dbConnection, logger);
   const documentProcessor = new DocumentProcessor(llmModel, logger);
