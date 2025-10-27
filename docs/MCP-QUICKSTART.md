@@ -217,10 +217,21 @@ $env:GRAPHRAG_DB_PATH=".graphrag\database.sqlite"; npm run mcp:dev
 | Feature | DeepWiki | GraphRAG MCP |
 |---------|----------|--------------|
 | Search | One repo at a time | Multi-repo simultaneous |
-| Type | Semantic only | Semantic + Graph |
+| Type | Semantic only | **Dynamic Hybrid (4-way)** |
 | Filtering | None (dumps all) | Intelligent attendant |
 | Cross-repo | Manual | Automatic |
 | Offline | No | Yes |
+
+### Dynamic Hybrid Search (NEW!)
+
+GraphRAG now uses intelligent 4-way hybrid search that automatically adapts to your query:
+
+- **Dense (Semantic)**: Vector embeddings for conceptual understanding
+- **Sparse (BM25)**: Keyword matching with tf-idf weighting
+- **Pattern (Fuzzy)**: Trigram-based typo tolerance and exact matching
+- **Graph (Relationships)**: Entity-relationship traversal
+
+The system uses LLM-based query analysis to automatically determine the optimal weights for each strategy based on query type (conceptual, identifier, relationship, fuzzy, pattern, or mixed).
 
 ### vs File System MCP
 

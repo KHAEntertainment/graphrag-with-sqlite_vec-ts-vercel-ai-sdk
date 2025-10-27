@@ -657,6 +657,18 @@ export class QueryEngine {
       charCount += JSON.stringify(result.metadata || {}).length;
     }
 
+    // Sparse results
+    for (const result of results.sparse) {
+      charCount += result.content.length;
+      charCount += JSON.stringify(result.metadata || {}).length;
+    }
+
+    // Pattern results
+    for (const result of results.pattern) {
+      charCount += result.content.length;
+      charCount += JSON.stringify(result.metadata || {}).length;
+    }
+
     // Graph results
     for (const result of results.graph) {
       charCount += result.id.length;

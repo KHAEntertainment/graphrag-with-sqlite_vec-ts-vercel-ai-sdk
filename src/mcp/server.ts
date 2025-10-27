@@ -23,6 +23,8 @@ import { pathToFileURL } from "url";
 import { GraphDatabaseConnection } from "../lib/graph-database.js";
 import { Logger } from "../lib/logger.js";
 import { QueryEngine } from "./tools/query-engine.js";
+import { HybridSearchEngine } from "./tools/hybrid-search.js";
+import type { HybridSearchOptions } from "./tools/hybrid-search.js";
 import { GraniteAttendant, GeminiAttendant } from "./attendant/granite-micro.js";
 import type { LanguageModelV1 } from "ai";
 
@@ -72,9 +74,9 @@ export class GraphRAGMCPServer {
   private db: GraphDatabaseConnection;
   private logger: Logger;
   private queryEngine: QueryEngine;
+  private hybridSearch: HybridSearchEngine;
   private graniteAttendant: GraniteAttendant;
   private geminiAttendant?: GeminiAttendant;
-  private embeddingProvider?: { embed: (text: string) => Promise<number[]> };
   private config: {
     dbPath: string;
     defaultAttendant: AttendantMode;
@@ -111,15 +113,17 @@ export class GraphRAGMCPServer {
     // Initialize query engine
     this.queryEngine = new QueryEngine(this.db.getSession());
 
+    // Initialize hybrid search engine
+    this.hybridSearch = new HybridSearchEngine(
+      this.db.getSession(),
+      config.model,
+      config.embeddingProvider
+    );
+
     // Initialize attendants
     this.graniteAttendant = new GraniteAttendant(config.model);
     if (config.geminiConfig) {
       this.geminiAttendant = new GeminiAttendant(config.geminiConfig);
-    }
-
-    // Store embedding provider if provided
-    if (config.embeddingProvider) {
-      this.embeddingProvider = config.embeddingProvider;
     }
 
     this.logger.info(
@@ -154,7 +158,8 @@ export class GraphRAGMCPServer {
           {
             name: "query_repositories",
             description:
-              "Query across multiple indexed repositories with semantic + graph search. " +
+              "Query across multiple indexed repositories with dynamic hybrid search (semantic + keyword + pattern + graph). " +
+              "Automatically weights search strategies using LLM analysis for optimal results. " +
               "Returns filtered results based on attendant mode (none, granite-micro, or gemini-2.5-pro).",
             inputSchema: {
               type: "object",
@@ -472,55 +477,83 @@ export class GraphRAGMCPServer {
     const maxTokens = (args.maxTokens || 500) as number;
 
     try {
-      // 1. Extract entities from query
-      const entities = this.queryEngine.extractEntities(query);
+      // Use hybrid search engine for intelligent multi-strategy search
+      const hybridOptions: HybridSearchOptions = {
+        ...(repositories && { repositories }),
+        maxResults: 20,
+        explain: attendantMode === "none", // Include explanations in raw mode
+      };
 
-      // 2. Query semantic search (if embedding provider available)
-      let semanticResults: any[] = [];
-      if (this.embeddingProvider) {
-        const queryEmbedding = await this.embeddingProvider.embed(query);
-        semanticResults = await this.queryEngine.queryLocalEmbeddings(
-          queryEmbedding,
-          { repositories, maxResults: 20 }
-        );
-      }
+      const hybridResult = await this.hybridSearch.search(query, hybridOptions);
 
-      // 3. Query graph database
-      const graphResults = await this.queryEngine.queryLocalGraph(entities, {
-        repositories,
-      });
-
-      // 4. Find cross-references
-      const crossRefs = await this.queryEngine.findCrossReferencesFromResults(
-        semanticResults,
-        graphResults
+      // Log search metrics and analysis
+      this.logger.info(
+        `Hybrid search completed: ${hybridResult.results.length} results, ` +
+        `type=${hybridResult.analysis.query_type}, ` +
+        `time=${hybridResult.metrics.totalTime}ms`
       );
 
-      // 5. Combine results
+      // Find cross-references from hybrid results
+      const crossRefs = await this.queryEngine.findCrossReferencesFromResults(
+        hybridResult.results.filter(r => r.sources.dense !== undefined).map(r => ({
+          chunk_id: r.id,
+          repo: r.repo,
+          content: r.content,
+          distance: 0,
+          metadata: r.metadata || {},
+        })),
+        []
+      );
+
+      // Format combined results for attendant
       const combined = {
-        semantic: semanticResults,
-        sparse: [], // TODO: Add sparse search
-        pattern: [], // TODO: Add pattern search
-        graph: graphResults,
+        semantic: hybridResult.results.filter(r => r.sources.dense !== undefined).map(r => ({
+          chunk_id: r.id,
+          repo: r.repo,
+          content: r.content,
+          distance: 0,
+          metadata: r.metadata || {},
+        })),
+        sparse: hybridResult.results.filter(r => r.sources.sparse !== undefined).map(r => ({
+          chunk_id: r.id,
+          repo: r.repo,
+          content: r.content,
+          score: r.score,
+          metadata: r.metadata || {},
+        })),
+        pattern: hybridResult.results.filter(r => r.sources.pattern !== undefined).map(r => ({
+          chunk_id: r.id,
+          repo: r.repo,
+          content: r.content,
+          match_type: 'fuzzy' as const,
+          score: r.score,
+          metadata: r.metadata || {},
+        })),
+        graph: hybridResult.results.filter(r => r.sources.graph !== undefined).map(r => ({
+          id: r.id,
+          repo: r.repo,
+          type: 'entity',
+          properties: r.metadata || {},
+        })),
         crossRefs: crossRefs,
         totalTokens: this.queryEngine.estimateTokens({
-          semantic: semanticResults,
+          semantic: hybridResult.results.map(r => ({ chunk_id: r.id, repo: r.repo, content: r.content, distance: 0, metadata: {} })),
           sparse: [],
           pattern: [],
-          graph: graphResults,
+          graph: [],
           crossRefs: crossRefs,
           totalTokens: 0,
         }),
       };
 
-      // 6. Filter through attendant (if not "none")
+      // Filter through attendant (if not "none")
       if (attendantMode === "none") {
-        // Return raw results
+        // Return raw results with hybrid search metrics
         return {
           content: [
             {
               type: "text",
-              text: this.formatRawResults(query, combined),
+              text: this.formatHybridResults(query, hybridResult, combined),
             },
           ],
         };
@@ -546,6 +579,12 @@ export class GraphRAGMCPServer {
             text:
               filtered.answer +
               `\n\n---\n*Repositories: ${filtered.repositories.join(", ")}*\n` +
+              `*Query Type: ${hybridResult.analysis.query_type} (confidence: ${(hybridResult.analysis.confidence || 0).toFixed(2)})*\n` +
+              `*Search Coverage: Dense ${(hybridResult.coverage.dense * 100).toFixed(0)}%, ` +
+              `Sparse ${(hybridResult.coverage.sparse * 100).toFixed(0)}%, ` +
+              `Pattern ${(hybridResult.coverage.pattern * 100).toFixed(0)}%, ` +
+              `Graph ${(hybridResult.coverage.graph * 100).toFixed(0)}%*\n` +
+              `*Performance: ${hybridResult.metrics.totalTime}ms (dense: ${hybridResult.metrics.denseTime}ms, sparse: ${hybridResult.metrics.sparseTime}ms, pattern: ${hybridResult.metrics.patternTime}ms, graph: ${hybridResult.metrics.graphTime}ms)*\n` +
               `*Efficiency: ${filtered.efficiency.originalTokens} → ${filtered.efficiency.filteredTokens} tokens (${isNaN(filtered.efficiency.reductionPercent) || !isFinite(filtered.efficiency.reductionPercent) ? 'N/A' : filtered.efficiency.reductionPercent + '%'} reduction)*\n` +
               `*Attendant: ${attendantMode}*`,
           },
@@ -757,40 +796,72 @@ export class GraphRAGMCPServer {
       const allRepos = await this.getLocalRepositories();
       const repositories = allRepos.map((r) => r.id);
 
-      // Extract entities
-      const entities = this.queryEngine.extractEntities(question);
+      // Use hybrid search with dynamic weighting
+      const hybridOptions: HybridSearchOptions = {
+        ...(repositories && repositories.length > 0 && { repositories }),
+        maxResults: 20,
+        explain: false,
+      };
 
-      // Query semantic search (if available)
-      let semanticResults: any[] = [];
-      if (this.embeddingProvider) {
-        const queryEmbedding = await this.embeddingProvider.embed(question);
-        semanticResults = await this.queryEngine.queryLocalEmbeddings(
-          queryEmbedding,
-          { repositories, maxResults: 20 }
-        );
-      }
+      const hybridResult = await this.hybridSearch.search(question, hybridOptions);
 
-      // Query graph
-      const graphResults = await this.queryEngine.queryLocalGraph(entities, {
-        repositories,
-      });
+      this.logger.info(
+        `Smart query hybrid search: ${hybridResult.results.length} results, ` +
+        `type=${hybridResult.analysis.query_type}, ` +
+        `time=${hybridResult.metrics.totalTime}ms`
+      );
 
       // Find cross-references
       const crossRefs = await this.queryEngine.findCrossReferencesFromResults(
-        semanticResults,
-        graphResults
+        hybridResult.results.filter(r => r.sources.dense !== undefined).map(r => ({
+          chunk_id: r.id,
+          repo: r.repo,
+          content: r.content,
+          distance: 0,
+          metadata: r.metadata || {},
+        })),
+        []
       );
 
       const combined = {
-        semantic: semanticResults,
-        sparse: [],
-        pattern: [],
-        graph: graphResults,
+        semantic: hybridResult.results.filter(r => r.sources.dense !== undefined).map(r => ({
+          chunk_id: r.id,
+          repo: r.repo,
+          content: r.content,
+          distance: 0,
+          metadata: r.metadata || {},
+        })),
+        sparse: hybridResult.results.filter(r => r.sources.sparse !== undefined).map(r => ({
+          chunk_id: r.id,
+          repo: r.repo,
+          content: r.content,
+          score: r.score,
+          metadata: r.metadata || {},
+        })),
+        pattern: hybridResult.results.filter(r => r.sources.pattern !== undefined).map(r => ({
+          chunk_id: r.id,
+          repo: r.repo,
+          content: r.content,
+          match_type: 'fuzzy' as const,
+          score: r.score,
+          metadata: r.metadata || {},
+        })),
+        graph: hybridResult.results.filter(r => r.sources.graph !== undefined).map(r => ({
+          id: r.id,
+          repo: r.repo,
+          type: 'entity',
+          properties: r.metadata || {},
+        })),
         crossRefs: crossRefs,
-        totalTokens: 0,
+        totalTokens: this.queryEngine.estimateTokens({
+          semantic: hybridResult.results.map(r => ({ chunk_id: r.id, repo: r.repo, content: r.content, distance: 0, metadata: {} })),
+          sparse: [],
+          pattern: [],
+          graph: [],
+          crossRefs: crossRefs,
+          totalTokens: 0,
+        }),
       };
-
-      combined.totalTokens = this.queryEngine.estimateTokens(combined);
 
       // Auto-select attendant if not forced
       let attendantMode: AttendantMode;
@@ -814,7 +885,7 @@ export class GraphRAGMCPServer {
           content: [
             {
               type: "text",
-              text: this.formatRawResults(question, combined),
+              text: this.formatHybridResults(question, hybridResult, combined),
             },
           ],
         };
@@ -834,6 +905,8 @@ export class GraphRAGMCPServer {
             text:
               filtered.answer +
               `\n\n---\n*Repositories: ${filtered.repositories.join(", ")}*\n` +
+              `*Query Type: ${hybridResult.analysis.query_type} (confidence: ${(hybridResult.analysis.confidence || 0).toFixed(2)})*\n` +
+              `*Search Time: ${hybridResult.metrics.totalTime}ms*\n` +
               `*Efficiency: ${filtered.efficiency.originalTokens} → ${filtered.efficiency.filteredTokens} tokens (${isNaN(filtered.efficiency.reductionPercent) || !isFinite(filtered.efficiency.reductionPercent) ? 'N/A' : filtered.efficiency.reductionPercent + '%'} reduction)*\n` +
               `*Attendant: ${attendantMode}${args.forceAttendant ? " (forced)" : " (auto-selected)"}*`,
           },
@@ -898,6 +971,63 @@ export class GraphRAGMCPServer {
 
     // Default to granite-micro for simple queries
     return "granite-micro";
+  }
+
+  /**
+   * Format hybrid search results with detailed metrics
+   */
+  private formatHybridResults(query: string, hybridResult: any, combined: any): string {
+    let output = `# Query: ${query}\n\n`;
+
+    // Add query analysis
+    output += `## Query Analysis\n`;
+    output += `- Type: **${hybridResult.analysis.query_type}**\n`;
+    output += `- Confidence: ${(hybridResult.analysis.confidence || 0).toFixed(2)}\n`;
+    output += `- Reasoning: ${hybridResult.analysis.reasoning}\n`;
+    output += `- Weights: Dense ${hybridResult.analysis.weights.dense}, ` +
+      `Sparse ${hybridResult.analysis.weights.sparse}, ` +
+      `Pattern ${hybridResult.analysis.weights.pattern}, ` +
+      `Graph ${hybridResult.analysis.weights.graph}\n\n`;
+
+    // Add performance metrics
+    output += `## Performance\n`;
+    output += `- Total Time: ${hybridResult.metrics.totalTime}ms\n`;
+    output += `- Dense Search: ${hybridResult.metrics.denseTime}ms\n`;
+    output += `- Sparse Search: ${hybridResult.metrics.sparseTime}ms\n`;
+    output += `- Pattern Search: ${hybridResult.metrics.patternTime}ms\n`;
+    output += `- Graph Search: ${hybridResult.metrics.graphTime}ms\n`;
+    output += `- Fusion: ${hybridResult.metrics.fusionTime}ms\n\n`;
+
+    // Add coverage stats
+    output += `## Coverage\n`;
+    output += `- Dense: ${(hybridResult.coverage.dense * 100).toFixed(0)}%\n`;
+    output += `- Sparse: ${(hybridResult.coverage.sparse * 100).toFixed(0)}%\n`;
+    output += `- Pattern: ${(hybridResult.coverage.pattern * 100).toFixed(0)}%\n`;
+    output += `- Graph: ${(hybridResult.coverage.graph * 100).toFixed(0)}%\n\n`;
+
+    // Add results with RRF scores
+    output += `## Results (${hybridResult.results.length})\n\n`;
+    for (const result of hybridResult.results.slice(0, 10)) {
+      output += `### Result #${hybridResult.results.indexOf(result) + 1} (RRF Score: ${result.score.toFixed(4)})\n`;
+      output += `**Repository:** ${result.repo}\n`;
+      output += `**Sources:** ${Object.entries(result.sources).map(([type, rank]) => `${type}=#${rank}`).join(', ')}\n\n`;
+      output += `${result.content.slice(0, 300)}...\n\n`;
+
+      // Add ranking explanation if available
+      if (hybridResult.explanations && hybridResult.explanations[hybridResult.results.indexOf(result)]) {
+        output += `**Ranking Explanation:**\n\`\`\`\n${hybridResult.explanations[hybridResult.results.indexOf(result)]}\n\`\`\`\n\n`;
+      }
+    }
+
+    // Add cross-references if any
+    if (combined.crossRefs && combined.crossRefs.length > 0) {
+      output += `## Cross-References (${combined.crossRefs.length})\n\n`;
+      for (const r of combined.crossRefs.slice(0, 10)) {
+        output += `- ${r.from_repo}/${r.from_entity} → ${r.to_repo}/${r.to_entity} (${r.type}, strength: ${r.strength.toFixed(2)})\n`;
+      }
+    }
+
+    return output;
   }
 
   /**
