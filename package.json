@@ -10,8 +10,10 @@
   },
   "scripts": {
     "dev": "tsx src/app.ts",
-    "build": "tsup src/app.ts src/export-graph-data.ts --format esm --dts --clean",
+    "build": "tsup src/app.ts src/export-graph-data.ts src/mcp/server.ts --format esm --dts --clean",
     "start": "node dist/app.js",
+    "mcp": "node dist/mcp/server.js",
+    "mcp:dev": "tsx src/mcp/server.ts",
     "typecheck": "tsc --noEmit",
     "export": "tsx src/export-graph-data.ts",
     "examples:embedding": "tsx examples/embedding-integration.ts"
@@ -29,19 +31,20 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "ai": "^3.4.0",
     "@ai-sdk/openai": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.20.2",
     "@xenova/transformers": "^2.17.0",
-    "llamacpp-ai-provider": "^0.0.9",
+    "ai": "^3.4.0",
     "better-sqlite3": "^11.0.0",
     "dotenv": "^16.4.5",
+    "llamacpp-ai-provider": "^0.0.9",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^20.14.0",
-    "typescript": "^5.5.0",
+    "tsup": "^8.1.0",
     "tsx": "^4.16.0",
-    "tsup": "^8.1.0"
+    "typescript": "^5.5.0"
   }
 }
