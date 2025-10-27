@@ -499,10 +499,14 @@ export class GraphRAGMCPServer {
       // 5. Combine results
       const combined = {
         semantic: semanticResults,
+        sparse: [], // TODO: Add sparse search
+        pattern: [], // TODO: Add pattern search
         graph: graphResults,
         crossRefs: crossRefs,
         totalTokens: this.queryEngine.estimateTokens({
           semantic: semanticResults,
+          sparse: [],
+          pattern: [],
           graph: graphResults,
           crossRefs: crossRefs,
           totalTokens: 0,
@@ -591,6 +595,8 @@ export class GraphRAGMCPServer {
 
       const combined = {
         semantic: [],
+        sparse: [],
+        pattern: [],
         graph: [...entityResults, ...relationships],
         crossRefs: [],
         totalTokens: 0,
@@ -777,6 +783,8 @@ export class GraphRAGMCPServer {
 
       const combined = {
         semantic: semanticResults,
+        sparse: [],
+        pattern: [],
         graph: graphResults,
         crossRefs: crossRefs,
         totalTokens: 0,
@@ -961,7 +969,7 @@ export class GraphRAGMCPServer {
 /**
  * Main entry point when run directly
  */
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const config: GraphRAGMCPConfig = {
     dbPath: process.env.GRAPHRAG_DB_PATH || ".graphrag/database.sqlite",
     defaultAttendant:

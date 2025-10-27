@@ -8,6 +8,7 @@
 import type { Database } from "better-sqlite3";
 import type { Embedding } from "../../types/embedding.js";
 import { Logger } from "../../lib/logger.js";
+import { generateTrigrams, levenshteinDistance } from "../../utils/trigram.js";
 
 /**
  * Query result from semantic search
@@ -17,6 +18,29 @@ export interface SemanticResult {
   repo: string;
   content: string;
   distance: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Query result from sparse (keyword) search
+ */
+export interface SparseResult {
+  chunk_id: string;
+  repo: string;
+  content: string;
+  score: number;  // BM25 score
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Query result from pattern matching search
+ */
+export interface PatternResult {
+  chunk_id: string;
+  repo: string;
+  content: string;
+  match_type: 'exact' | 'fuzzy' | 'regex';
+  score: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -48,6 +72,8 @@ export interface CrossReference {
  */
 export interface CombinedResults {
   semantic: SemanticResult[];
+  sparse: SparseResult[];
+  pattern: PatternResult[];
   graph: GraphResult[];
   crossRefs: CrossReference[];
   totalTokens: number;
@@ -164,6 +190,222 @@ export class QueryEngine {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error("Error querying embeddings:", errorMessage);
+      return [];
+    }
+  }
+
+  /**
+   * Check if FTS5 is available
+   */
+  private hasFTS5Support(): boolean {
+    try {
+      const result = this.db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
+        )
+        .get();
+      return !!result;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Query using sparse retrieval (FTS5 with BM25)
+   */
+  async querySparse(
+    query: string,
+    options: QueryOptions = {}
+  ): Promise<SparseResult[]> {
+    if (!this.hasFTS5Support()) {
+      this.logger.warn(
+        "FTS5 not available, skipping sparse search"
+      );
+      return [];
+    }
+
+    const {
+      repositories,
+      maxResults = 20,
+    } = options;
+
+    try {
+      let sql = `
+        SELECT
+          chunk_id,
+          repo,
+          content,
+          bm25(chunks_fts) as score
+        FROM chunks_fts
+        WHERE content MATCH ?
+      `;
+
+      const params: any[] = [query];
+
+      if (repositories && repositories.length > 0) {
+        sql += ` AND repo IN (${repositories.map(() => "?").join(",")})`;
+        params.push(...repositories);
+      }
+
+      sql += ` ORDER BY score ASC LIMIT ?`;
+      params.push(maxResults);
+
+      const stmt = this.db.prepare(sql);
+      const results = stmt.all(...params) as any[];
+
+      return results.map((row) => ({
+        chunk_id: row.chunk_id,
+        repo: row.repo,
+        content: row.content,
+        score: row.score,
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error("Error in sparse search:", errorMessage);
+      return [];
+    }
+  }
+
+  /**
+   * Query using pattern matching (substring/wildcard)
+   */
+  async queryPattern(
+    pattern: string,
+    options: QueryOptions = {}
+  ): Promise<PatternResult[]> {
+    const {
+      repositories,
+      maxResults = 20,
+    } = options;
+
+    try {
+      let sql = `
+        SELECT
+          chunk_id,
+          repo,
+          content,
+          metadata
+        FROM chunks
+        WHERE content LIKE ?
+      `;
+
+      // Wrap pattern in wildcards for substring matching
+      const params: any[] = [`%${pattern}%`];
+
+      if (repositories && repositories.length > 0) {
+        sql += ` AND repo IN (${repositories.map(() => "?").join(",")})`;
+        params.push(...repositories);
+      }
+
+      sql += ` LIMIT ?`;
+      params.push(maxResults);
+
+      const stmt = this.db.prepare(sql);
+      const results = stmt.all(...params) as any[];
+
+      return results.map((row) => ({
+        chunk_id: row.chunk_id,
+        repo: row.repo,
+        content: row.content,
+        match_type: 'exact' as const,
+        score: 1.0, // Exact match gets perfect score
+        metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error("Error in pattern search:", errorMessage);
+      return [];
+    }
+  }
+
+  /**
+   * Query using fuzzy matching with trigrams and Levenshtein distance
+   */
+  async queryFuzzy(
+    pattern: string,
+    options: QueryOptions & { threshold?: number } = {}
+  ): Promise<PatternResult[]> {
+    const {
+      repositories,
+      maxResults = 20,
+      threshold = 0.7,
+    } = options;
+
+    try {
+      // Generate trigrams from pattern
+      const patternTrigrams = generateTrigrams(pattern);
+
+      // Find chunks with matching trigrams
+      let sql = `
+        SELECT DISTINCT
+          c.chunk_id,
+          c.repo,
+          c.content,
+          c.metadata,
+          COUNT(DISTINCT t.trigram) as trigram_matches
+        FROM chunks c
+        JOIN chunks_trigram t ON c.chunk_id = t.chunk_id
+        WHERE t.trigram IN (${patternTrigrams.map(() => "?").join(",")})
+      `;
+
+      const params: any[] = [...patternTrigrams];
+
+      if (repositories && repositories.length > 0) {
+        sql += ` AND c.repo IN (${repositories.map(() => "?").join(",")})`;
+        params.push(...repositories);
+      }
+
+      sql += ` GROUP BY c.chunk_id, c.repo, c.content, c.metadata
+               HAVING trigram_matches >= ?
+               ORDER BY trigram_matches DESC
+               LIMIT ?`;
+
+      // Require at least 30% of trigrams to match
+      const minTrigramMatches = Math.ceil(patternTrigrams.length * 0.3);
+      params.push(minTrigramMatches, maxResults * 3); // Get more for Levenshtein filtering
+
+      const stmt = this.db.prepare(sql);
+      const candidates = stmt.all(...params) as any[];
+
+      // Calculate Levenshtein distance for each candidate
+      const results = candidates
+        .map((row) => {
+          // Find best match substring in content
+          const content = row.content.toLowerCase();
+          const patternLower = pattern.toLowerCase();
+          let bestDistance = Infinity;
+
+          // Check pattern appears in content (exact or near)
+          for (let i = 0; i <= content.length - pattern.length; i++) {
+            const substring = content.slice(i, i + pattern.length);
+            const distance = levenshteinDistance(substring, patternLower);
+
+            if (distance < bestDistance) {
+              bestDistance = distance;
+            }
+          }
+
+          // Calculate similarity score
+          const maxLength = Math.max(pattern.length, pattern.length);
+          const similarity = 1 - (bestDistance / maxLength);
+
+          return {
+            chunk_id: row.chunk_id,
+            repo: row.repo,
+            content: row.content,
+            match_type: 'fuzzy' as const,
+            score: similarity,
+            metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+          };
+        })
+        .filter(result => result.score >= threshold)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, maxResults);
+
+      return results;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error("Error in fuzzy search:", errorMessage);
       return [];
     }
   }
