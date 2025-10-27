@@ -12,7 +12,6 @@ export class GraphManager {
   constructor(dbConnection: GraphDatabaseConnection, logger: Logger) {
     this.dbConnection = dbConnection;
     this.logger = logger;
-    this.dbConnection.clearDatabase();
   }
 
   /**
