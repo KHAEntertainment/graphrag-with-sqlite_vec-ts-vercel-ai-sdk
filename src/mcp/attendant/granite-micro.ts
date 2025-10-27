@@ -111,9 +111,9 @@ export class GraniteAttendant {
         efficiency: {
           originalTokens,
           filteredTokens,
-          reductionPercent: Math.round(
-            ((originalTokens - filteredTokens) / originalTokens) * 100
-          ),
+          reductionPercent: originalTokens > 0
+            ? Math.round(((originalTokens - filteredTokens) / originalTokens) * 100)
+            : 0,
         },
       };
     } catch (error) {
@@ -212,7 +212,10 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
     const formatted = results
       .slice(0, 10) // Top 10 results
       .map((r, i) => {
-        const props = Object.entries(r.properties)
+        const rawProps = typeof r.properties === "string"
+          ? ((): Record<string, unknown> => { try { return JSON.parse(r.properties); } catch { return {}; } })()
+          : (r.properties ?? {});
+        const props = Object.entries(rawProps as Record<string, unknown>)
           .slice(0, 3)
           .map(([k, v]) => `${k}: ${v}`)
           .join(", ");
@@ -235,7 +238,8 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
     const formatted = results
       .slice(0, 5) // Top 5 refs
       .map((r, i) => {
-        return `${i + 1}. **${r.from_repo}/${r.from_entity}** → **${r.to_repo}/${r.to_entity}**\n   Type: ${r.type}, Strength: ${r.strength.toFixed(2)}`;
+        const s = typeof r.strength === "number" ? r.strength.toFixed(2) : "N/A";
+        return `${i + 1}. **${r.from_repo}/${r.from_entity}** → **${r.to_repo}/${r.to_entity}**\n   Type: ${r.type}, Strength: ${s}`;
       })
       .join("\n\n");
 
@@ -316,9 +320,9 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
       efficiency: {
         originalTokens: results.totalTokens,
         filteredTokens,
-        reductionPercent: Math.round(
-          ((results.totalTokens - filteredTokens) / results.totalTokens) * 100
-        ),
+        reductionPercent: results.totalTokens > 0
+          ? Math.round(((results.totalTokens - filteredTokens) / results.totalTokens) * 100)
+          : 0,
       },
     };
   }
