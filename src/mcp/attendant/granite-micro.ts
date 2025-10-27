@@ -318,10 +318,9 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
       efficiency: {
         originalTokens: results.totalTokens,
         filteredTokens,
-        reductionPercent: Math.round(
-          ((results.totalTokens - filteredTokens) / results.totalTokens) * 100
-        ),
-      },
+        reductionPercent: results.totalTokens > 0
+          ? Math.round(((results.totalTokens - filteredTokens) / results.totalTokens) * 100)
+          : 0,
     };
   }
 }
