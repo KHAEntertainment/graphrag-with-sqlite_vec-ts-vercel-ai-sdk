@@ -111,9 +111,9 @@ export class GraniteAttendant {
         efficiency: {
           originalTokens,
           filteredTokens,
-          reductionPercent: Math.round(
-            ((originalTokens - filteredTokens) / originalTokens) * 100
-          ),
+          reductionPercent: originalTokens > 0
+            ? Math.round(((originalTokens - filteredTokens) / originalTokens) * 100)
+            : 0,
         },
       };
     } catch (error) {
