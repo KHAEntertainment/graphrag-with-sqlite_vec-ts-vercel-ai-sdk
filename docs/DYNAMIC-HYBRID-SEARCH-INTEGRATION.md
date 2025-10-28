@@ -136,17 +136,30 @@ SELECT chunk_id, content
 FROM chunks
 WHERE content LIKE '%StreamingTextResponse%';
 
--- 2. Fuzzy (Levenshtein distance)
-SELECT chunk_id, content,
-       levenshtein(content, 'StreamingTextRespons') as distance
-FROM chunks
-WHERE distance < 3;
-
--- 3. Regex
+-- 2. Fuzzy (Levenshtein distance) - computed in TypeScript layer
+-- Find candidates using trigram index, then compute Levenshtein in app
 SELECT chunk_id, content
 FROM chunks
-WHERE content REGEXP 'Streaming.*Response';
+WHERE chunk_id IN (
+  -- Get candidates with trigram matching
+  SELECT chunk_id FROM chunks_trigram
+  WHERE trigram IN ('str', 'tre', 'rea', 'eam', 'ami', 'min', 'ing')
+  GROUP BY chunk_id
+  HAVING COUNT(*) >= 3  -- At least 3 matching trigrams
+);
+
+-- 3. Regex - computed in TypeScript layer
+-- SQLite doesn't include built-in REGEXP; we use trigram + app-layer pattern matching
+SELECT chunk_id, content
+FROM chunks
+WHERE content LIKE '%Streaming%Response%';  -- Basic pattern with LIKE
 ```
+
+**Note:** SQLite doesn't include built-in REGEXP or Levenshtein functions by default.
+The actual implementation uses:
+- Trigram indexing for efficient fuzzy substring matching
+- Levenshtein distance computed in the TypeScript application layer
+- Pattern matching with LIKE and application-layer regex for complex patterns
 
 **Strengths:**
 - **Ultra-high precision** for exact codes
