@@ -386,7 +386,7 @@ export class QueryEngine {
           }
 
           // Calculate similarity score
-          const maxLength = Math.max(substring.length, pattern.length);
+          const maxLength = pattern.length;
           const similarity = 1 - (bestDistance / maxLength);
 
           return {
