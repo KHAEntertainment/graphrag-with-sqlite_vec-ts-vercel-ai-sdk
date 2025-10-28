@@ -75,7 +75,7 @@ Query → LLM Analyzer (determine query type)
 
 **Implementation Options:**
 
-**Option A: SQLite FTS5 (Built-in)**
+### Option A: SQLite FTS5 (Built-in)
 ```sql
 CREATE VIRTUAL TABLE chunks_fts USING fts5(
   chunk_id,
@@ -91,7 +91,7 @@ ORDER BY score
 LIMIT 20;
 ```
 
-**Option B: Learned Sparse Embeddings (Pine Cone SPLADE)**
+### Option B: Learned Sparse Embeddings (Pine Cone SPLADE)
 - More sophisticated than traditional BM25
 - Provides semantic expansion (learns that "car" relates to "vehicle")
 - Still keyword-focused but with learned weighting
@@ -114,7 +114,7 @@ LIMIT 20;
 
 **What:** N-gram indexing for substring and fuzzy matching
 
-**Implementation: SQLite Trigram Index**
+### Implementation: SQLite Trigram Index
 
 ```sql
 -- Create trigram index
