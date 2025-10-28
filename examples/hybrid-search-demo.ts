@@ -14,6 +14,7 @@
 import Database from 'better-sqlite3';
 import { HybridSearchEngine, createHybridSearchEngine } from '../src/mcp/tools/hybrid-search.js';
 import type { HybridSearchOptions } from '../src/mcp/tools/hybrid-search.js';
+import { pathToFileURL } from 'url';
 
 /**
  * Example 1: Conceptual Query
@@ -316,7 +317,7 @@ async function main() {
 }
 
 // Run if executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main();
 }
 

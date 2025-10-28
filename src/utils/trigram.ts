@@ -10,21 +10,16 @@
  * Handles Unicode properly and preserves case for code identifiers
  */
 export function generateTrigrams(text: string): string[] {
-  if (text.length < 3) {
-    return [text];
-  }
+  const chars = Array.from(text); // codepoint-aware
+  if (chars.length < 3) return [text];
 
   const trigrams: string[] = [];
+  const padded = [' ', ' ', ...chars, ' ']; // capture boundaries
 
-  // Add padding to capture beginning and end
-  const paddedText = `  ${text} `;
-
-  for (let i = 0; i < paddedText.length - 2; i++) {
-    const trigram = paddedText.slice(i, i + 3);
-    trigrams.push(trigram);
+  for (let i = 0; i < padded.length - 2; i++) {
+    trigrams.push(padded.slice(i, i + 3).join(''));
   }
-
-  return Array.from(new Set(trigrams)); // Remove duplicates
+  return Array.from(new Set(trigrams));
 }
 
 /**
@@ -32,36 +27,28 @@ export function generateTrigrams(text: string): string[] {
  * Used for fuzzy matching (typo tolerance)
  */
 export function levenshteinDistance(str1: string, str2: string): number {
-  const len1 = str1.length;
-  const len2 = str2.length;
+  const a = Array.from(str1);
+  const b = Array.from(str2);
+  const n = a.length, m = b.length;
+  if (!n) return m;
+  if (!m) return n;
 
-  // Create 2D array for dynamic programming
-  const dp: number[][] = Array(len1 + 1)
-    .fill(null)
-    .map(() => Array(len2 + 1).fill(0));
+  let prev = new Array(m + 1);
+  let curr = new Array(m + 1);
 
-  // Initialize first column and row
-  for (let i = 0; i <= len1; i++) {
-    dp[i][0] = i;
-  }
-  for (let j = 0; j <= len2; j++) {
-    dp[0][j] = j;
-  }
+  for (let j = 0; j <= m; j++) prev[j] = j;
 
-  // Fill the dp table
-  for (let i = 1; i <= len1; i++) {
-    for (let j = 1; j <= len2; j++) {
-      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
-
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,      // deletion
-        dp[i][j - 1] + 1,      // insertion
-        dp[i - 1][j - 1] + cost // substitution
-      );
+  for (let i = 1; i <= n; i++) {
+    curr[0] = i;
+    const ai = a[i - 1].toLowerCase();
+    for (let j = 1; j <= m; j++) {
+      const cost = ai === b[j - 1].toLowerCase() ? 0 : 1;
+      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
     }
+    [prev, curr] = [curr, prev];
   }
 
-  return dp[len1][len2];
+  return prev[m];
 }
 
 /**
@@ -139,23 +126,23 @@ export function findFuzzyMatches(
 export function extractIdentifiers(text: string): string[] {
   const identifiers: Set<string> = new Set();
 
-  // Match CamelCase (e.g., StreamingTextResponse)
-  const camelCaseRegex = /[A-Z][a-z]+(?:[A-Z][a-z]+)*/g;
+  // Match CamelCase with acronyms and digits (e.g., HTTPServer2, StreamingTextResponse)
+  const camelCaseRegex = /[A-Z][A-Za-z0-9]*([A-Z][a-z0-9]+)*/g;
   const camelMatches = text.match(camelCaseRegex) || [];
   camelMatches.forEach(id => identifiers.add(id));
 
-  // Match snake_case (e.g., streaming_text_response)
-  const snakeCaseRegex = /[a-z]+(?:_[a-z]+)+/g;
+  // Match snake_case allowing digits (e.g., streaming_text_response, snake2_case)
+  const snakeCaseRegex = /[a-z0-9]+(?:[_][a-z0-9]+)+/g;
   const snakeMatches = text.match(snakeCaseRegex) || [];
   snakeMatches.forEach(id => identifiers.add(id));
 
-  // Match kebab-case (e.g., streaming-text-response)
-  const kebabCaseRegex = /[a-z]+(?:-[a-z]+)+/g;
+  // Match kebab-case allowing digits (e.g., streaming-text-response, kebab2-case)
+  const kebabCaseRegex = /[a-z0-9]+(?:[-][a-z0-9]+)+/g;
   const kebabMatches = text.match(kebabCaseRegex) || [];
   kebabMatches.forEach(id => identifiers.add(id));
 
-  // Match UPPER_CASE constants (e.g., MAX_TOKENS)
-  const upperCaseRegex = /[A-Z]+(?:_[A-Z]+)+/g;
+  // Match UPPER_CASE constants with digits (e.g., MAX_TOKENS, API_KEY_2)
+  const upperCaseRegex = /[A-Z0-9]+(?:[_][A-Z0-9]+)+/g;
   const upperMatches = text.match(upperCaseRegex) || [];
   upperMatches.forEach(id => identifiers.add(id));
 
@@ -174,7 +161,7 @@ export function extractIdentifiers(text: string): string[] {
 export function normalizeIdentifier(identifier: string): string {
   return identifier
     .toLowerCase()
-    .replace(/[-_]/g, '') // Remove separators
+    .replace(/[-_.\\/@]/g, '') // Remove common separators and scopes
     .trim();
 }
 

@@ -427,7 +427,7 @@ export class QueryEngine {
       let sql = `
         SELECT
           n.id,
-          n.repo,
+          json_extract(n.properties, '$.repo') AS repo,
           n.properties,
           e.relationship,
           e.weight
@@ -451,7 +451,7 @@ export class QueryEngine {
       }
 
       if (repositories && repositories.length > 0) {
-        sql += ` AND n.repo IN (${repositories.map(() => "?").join(",")})`;
+        sql += ` AND json_extract(n.properties, '$.repo') IN (${repositories.map(() => "?").join(",")})`;
         params.push(...repositories);
       }
 
@@ -460,7 +460,7 @@ export class QueryEngine {
 
       return results.map((row) => ({
         id: row.id,
-        repo: row.repo || "unknown",
+        repo: row.repo ?? "unknown",
         properties: row.properties ? JSON.parse(row.properties) : {},
         relationship: row.relationship,
         weight: row.weight,
@@ -564,7 +564,7 @@ export class QueryEngine {
       let sql = `
         SELECT
           n.id,
-          n.repo,
+          json_extract(n.properties, '$.repo') AS repo,
           n.properties,
           e.relationship,
           e.weight
@@ -576,7 +576,7 @@ export class QueryEngine {
       const params: any[] = [`%${entityName}%`, `%${entityName}%`];
 
       if (repositories && repositories.length > 0) {
-        sql += ` AND n.repo IN (${repositories.map(() => "?").join(",")})`;
+        sql += ` AND json_extract(n.properties, '$.repo') IN (${repositories.map(() => "?").join(",")})`;
         params.push(...repositories);
       }
 
@@ -585,7 +585,7 @@ export class QueryEngine {
 
       return results.map((row) => ({
         id: row.id,
-        repo: row.repo || "unknown",
+        repo: row.repo ?? "unknown",
         properties: row.properties ? JSON.parse(row.properties) : {},
         relationship: row.relationship,
         weight: row.weight,
@@ -610,7 +610,7 @@ export class QueryEngine {
       let sql = `
         SELECT
           n.id,
-          n.repo,
+          json_extract(n.properties, '$.repo') AS repo,
           n.properties,
           e.relationship,
           e.weight
@@ -623,7 +623,7 @@ export class QueryEngine {
       const params: any[] = [entityId, entityId, entityId];
 
       if (repositories && repositories.length > 0) {
-        sql += ` AND n.repo IN (${repositories.map(() => "?").join(",")})`;
+        sql += ` AND json_extract(n.properties, '$.repo') IN (${repositories.map(() => "?").join(",")})`;
         params.push(...repositories);
       }
 
@@ -632,7 +632,7 @@ export class QueryEngine {
 
       return results.map((row) => ({
         id: row.id,
-        repo: row.repo || "unknown",
+        repo: row.repo ?? "unknown",
         properties: row.properties ? JSON.parse(row.properties) : {},
         relationship: row.relationship,
         weight: row.weight,

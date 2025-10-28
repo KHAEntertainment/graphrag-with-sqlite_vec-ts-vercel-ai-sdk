@@ -25,14 +25,14 @@ This document analyzes integrating **dynamic hybrid search with LLM-weighted fus
 ### Current vs Enhanced Architecture
 
 **Current (Planned):**
-```
+```text
 Query → Semantic Search (embeddings) → Results
       → Graph Search (relationships) → Results
       → Merge → Attendant Filter → Response
 ```
 
 **Enhanced (Dynamic Hybrid):**
-```
+```text
 Query → LLM Analyzer (determine query type)
       ↓
       Weights: [dense: 0.3, sparse: 0.4, pattern: 0.2, graph: 0.1]
@@ -201,7 +201,7 @@ AND n2.id != n1.id;
 
 The LLM analyzes the query to determine optimal weights:
 
-```typescript
+```ts
 interface QueryAnalysis {
   query_type: 'conceptual' | 'identifier' | 'relationship' | 'fuzzy' | 'mixed';
   weights: {
@@ -217,7 +217,7 @@ interface QueryAnalysis {
 ### Example Query Classifications
 
 **1. Conceptual Query:**
-```
+```text
 Query: "How do I stream AI responses in a React app?"
 Analysis:
   type: conceptual
@@ -226,7 +226,7 @@ Analysis:
 ```
 
 **2. Identifier Query:**
-```
+```text
 Query: "Find the StreamingTextResponse class"
 Analysis:
   type: identifier
@@ -235,7 +235,7 @@ Analysis:
 ```
 
 **3. Relationship Query:**
-```
+```text
 Query: "What components use the useChat hook?"
 Analysis:
   type: relationship
@@ -244,7 +244,7 @@ Analysis:
 ```
 
 **4. Fuzzy Query (typo):**
-```
+```text
 Query: "streamingTextRespons" (missing 'e')
 Analysis:
   type: fuzzy
@@ -253,7 +253,7 @@ Analysis:
 ```
 
 **5. Code Pattern Query:**
-```
+```text
 Query: "Find API keys in format 'sk-proj-xxxx'"
 Analysis:
   type: mixed
@@ -267,7 +267,7 @@ Analysis:
 
 RRF combines ranked lists from different sources:
 
-```typescript
+```ts
 function reciprocalRankFusion(
   results: {
     dense: SearchResult[];
@@ -364,7 +364,7 @@ CREATE TABLE edges (...);
 
 ### Unified Query Function
 
-```typescript
+```ts
 class HybridSearchEngine {
   async search(
     query: string,
@@ -473,7 +473,7 @@ class HybridSearchEngine {
 
 ### Query Performance Targets
 
-```
+```text
 Dense search (vec):      10-50ms   (vector similarity)
 Sparse search (FTS5):    5-20ms    (BM25 inverted index)
 Pattern search (trigram): 20-100ms  (fuzzy matching)
@@ -486,7 +486,7 @@ Total:                   50-200ms  (parallel execution)
 ### Storage Overhead
 
 **Per 1,000 chunks (avg 500 chars each):**
-```
+```text
 Dense embeddings:  ~3 MB   (768 floats × 4 bytes × 1000)
 Sparse FTS5:       ~1 MB   (inverted index)
 Trigram index:     ~5 MB   (n-grams for fuzzy matching)
@@ -507,7 +507,7 @@ Total:             ~11 MB per 1,000 chunks
 ### Test Case: Finding `StreamingTextResponse`
 
 **Pure Semantic:**
-```
+```text
 Query: "streaming text response"
 Results:
 1. "async text streaming handler"       (0.85 similarity)
@@ -517,7 +517,7 @@ Results:
 ```
 
 **Hybrid (LLM-weighted):**
-```
+```text
 Query: "streaming text response"
 LLM Analysis: Likely searching for identifier
 Weights: { dense: 0.2, sparse: 0.5, pattern: 0.2, graph: 0.1 }
@@ -536,7 +536,7 @@ RRF Fusion:
 ### Test Case: Conceptual Question
 
 **Pure Keyword:**
-```
+```text
 Query: "How do I implement real-time AI chat in React?"
 Results: (BM25 scores based on keyword frequency)
 1. "AI implementation guide"

@@ -155,6 +155,7 @@ export class HybridSearchEngine {
     let explanations: string[] | undefined;
     if (options.explain) {
       explanations = fusedResults.map(result =>
+        `Fused score=${result.score.toFixed(4)}\n` +
         this.rrf.explainRanking(result, analysis.weights)
       );
     }
@@ -210,7 +211,8 @@ export class HybridSearchEngine {
     // Dense (semantic) search
     promises.push(
       (async () => {
-        if (weights.dense === 0 || !this.embeddingProvider) {
+        const cutoff = 0.05;
+        if ((weights.dense ?? 0) < cutoff || !this.embeddingProvider) {
           return [];
         }
 
@@ -219,7 +221,7 @@ export class HybridSearchEngine {
           const embedding = await this.embeddingProvider.embed(query);
           const results = await this.queryEngine.queryLocalEmbeddings(
             embedding,
-            { repositories: options.repositories, maxResults: 20 }
+            { repositories: options.repositories, maxResults: options.maxResults ?? 20 }
           );
           timings[0] = Date.now() - start;
           return results;
@@ -234,7 +236,8 @@ export class HybridSearchEngine {
     // Sparse (keyword) search
     promises.push(
       (async () => {
-        if (weights.sparse === 0) {
+        const cutoff = 0.05;
+        if ((weights.sparse ?? 0) < cutoff) {
           return [];
         }
 
@@ -242,7 +245,7 @@ export class HybridSearchEngine {
         try {
           const results = await this.queryEngine.querySparse(
             query,
-            { repositories: options.repositories, maxResults: 20 }
+            { repositories: options.repositories, maxResults: options.maxResults ?? 20 }
           );
           timings[1] = Date.now() - start;
           return results;
@@ -257,7 +260,8 @@ export class HybridSearchEngine {
     // Pattern (fuzzy) search
     promises.push(
       (async () => {
-        if (weights.pattern === 0) {
+        const cutoff = 0.05;
+        if ((weights.pattern ?? 0) < cutoff) {
           return [];
         }
 
@@ -266,7 +270,7 @@ export class HybridSearchEngine {
           // Use fuzzy search for better results
           const results = await this.queryEngine.queryFuzzy(
             query,
-            { repositories: options.repositories, maxResults: 20, threshold: 0.6 }
+            { repositories: options.repositories, maxResults: options.maxResults ?? 20, threshold: 0.6 }
           );
           timings[2] = Date.now() - start;
           return results;
@@ -281,7 +285,8 @@ export class HybridSearchEngine {
     // Graph (relationship) search
     promises.push(
       (async () => {
-        if (weights.graph === 0) {
+        const cutoff = 0.05;
+        if ((weights.graph ?? 0) < cutoff) {
           return [];
         }
 
@@ -292,8 +297,11 @@ export class HybridSearchEngine {
             entities,
             { repositories: options.repositories }
           );
+          const limited = (options.maxResults && results.length > options.maxResults)
+            ? results.slice(0, options.maxResults)
+            : results;
           timings[3] = Date.now() - start;
-          return results;
+          return limited;
         } catch (error) {
           this.logger.warn('Graph search failed:', error);
           timings[3] = Date.now() - start;

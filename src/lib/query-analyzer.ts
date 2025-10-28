@@ -117,12 +117,12 @@ export class QueryAnalyzer {
       temperature: 0.3, // Lower temperature for consistent classification
     });
 
-    // Validate and normalize weights
+    // Validate and normalize weights (always normalize; warn if invalid)
     let weights = result.object.weights;
     if (!validateWeights(weights)) {
-      this.logger.warn('LLM returned invalid weights, normalizing');
-      weights = normalizeWeights(weights);
+      this.logger.warn('LLM returned non-summing weights; normalizing');
     }
+    weights = normalizeWeights(weights);
 
     return {
       query_type: result.object.query_type,
@@ -239,9 +239,10 @@ Weights must sum to 1.0. Be decisive - favor the most relevant strategy heavily.
       queryLower.includes(kw)
     );
 
-    // Check for pattern indicators
-    const hasPattern = /[*?[\]{}()^$|\\]/.test(query); // Regex-like characters
-    const hasCodePattern = /\b[a-z]{2,3}-[a-z]{4,}-[a-z0-9]+\b/i.test(query); // API key pattern
+    // Check for pattern indicators (stricter)
+    const specialsCount = (query.match(/[*+?\[\\\]{}()^$|\\]/g) || []).length;
+    const hasPattern = specialsCount >= 2; // reduce false positives
+    const hasCodePattern = /\b(?:sk|ghp|gho|pk|tok)[-_][A-Za-z0-9_-]{6,}\b/.test(query);
 
     // Check for potential typos (heuristic: unusual character sequences)
     const hasUnusualSequence = /[bcdfghjklmnpqrstvwxyz]{4,}/i.test(query);
@@ -305,9 +306,19 @@ Weights must sum to 1.0. Be decisive - favor the most relevant strategy heavily.
     queries: string[],
     options: QueryAnalysisOptions = {}
   ): Promise<QueryAnalysis[]> {
-    return Promise.all(
-      queries.map(query => this.analyze(query, options))
-    );
+    // Optional: cap concurrency (requires a tiny utility or p-limit)
+    const limit = (fn => {
+      const q: Promise<any>[] = []; const max = 5;
+      return (f: () => Promise<any>) => {
+        const p = (async () => {
+          while (q.length >= max) await Promise.race(q);
+          const r = f(); q.push(r.finally(() => q.splice(q.indexOf(r), 1)));
+          return r;
+        })();
+        return p;
+      };
+    })();
+    return Promise.all(queries.map(q => limit(() => this.analyze(q, options))));
   }
 
   /**

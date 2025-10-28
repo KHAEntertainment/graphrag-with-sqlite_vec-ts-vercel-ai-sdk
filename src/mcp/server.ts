@@ -1007,23 +1007,23 @@ export class GraphRAGMCPServer {
 
     // Add results with RRF scores
     output += `## Results (${hybridResult.results.length})\n\n`;
-    for (const result of hybridResult.results.slice(0, 10)) {
-      output += `### Result #${hybridResult.results.indexOf(result) + 1} (RRF Score: ${result.score.toFixed(4)})\n`;
+    hybridResult.results.slice(0, 10).forEach((result, idx) => {
+      output += `### Result #${idx + 1} (RRF Score: ${result.score.toFixed(4)})\n`;
       output += `**Repository:** ${result.repo}\n`;
       output += `**Sources:** ${Object.entries(result.sources).map(([type, rank]) => `${type}=#${rank}`).join(', ')}\n\n`;
       output += `${result.content.slice(0, 300)}...\n\n`;
 
       // Add ranking explanation if available
-      if (hybridResult.explanations && hybridResult.explanations[hybridResult.results.indexOf(result)]) {
-        output += `**Ranking Explanation:**\n\`\`\`\n${hybridResult.explanations[hybridResult.results.indexOf(result)]}\n\`\`\`\n\n`;
+      if (hybridResult.explanations && hybridResult.explanations[idx]) {
+        output += `**Ranking Explanation:**\n\`\`\`\n${hybridResult.explanations[idx]}\n\`\`\`\n\n`;
       }
-    }
+    });
 
     // Add cross-references if any
     if (combined.crossRefs && combined.crossRefs.length > 0) {
       output += `## Cross-References (${combined.crossRefs.length})\n\n`;
       for (const r of combined.crossRefs.slice(0, 10)) {
-        output += `- ${r.from_repo}/${r.from_entity} → ${r.to_repo}/${r.to_entity} (${r.type}, strength: ${r.strength.toFixed(2)})\n`;
+        output += `- ${r.from_repo}/${r.from_entity} → ${r.to_repo}/${r.to_entity} (${r.type}, strength: ${typeof r.strength === 'number' ? r.strength.toFixed(2) : 'N/A'})\n`;
       }
     }
 

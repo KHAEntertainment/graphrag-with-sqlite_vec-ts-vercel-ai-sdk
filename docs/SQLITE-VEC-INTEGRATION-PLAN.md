@@ -211,7 +211,7 @@ const reasoning = await structLM.reason({
 
 ### Recommended Architecture Pattern
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                      Code/Documentation                      │
 └───────────────────────────────┬─────────────────────────────┘

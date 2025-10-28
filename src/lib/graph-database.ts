@@ -32,6 +32,9 @@ export class GraphDatabaseConnection {
 
     // Use WAL mode for better performance
     this.db.pragma('journal_mode = WAL');
+    
+    // Enforce foreign keys (needed for declared FKs and cascades)
+    this.db.pragma('foreign_keys = ON');
 
     this.initializeSchema();
   }
@@ -133,6 +136,9 @@ export class GraphDatabaseConnection {
   clearDatabase(): void {
     this.db.exec('DELETE FROM edges');
     this.db.exec('DELETE FROM nodes');
+    this.db.exec('DELETE FROM chunks');
+    try { this.db.exec('DELETE FROM chunks_fts'); } catch { /* ignore if FTS5 absent */ }
+    this.db.exec('DELETE FROM chunks_trigram');
   }
 
   /**

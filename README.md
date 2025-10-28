@@ -105,7 +105,8 @@ Based on extensive research, these models provide optimal performance for GraphR
   - Infers missing links and answers complex graph queries
   - Runs on MacBook Pro with quantization
 
-**Full details:** [docs/SQLITE-VEC-INTEGRATION-PLAN.md](docs/SQLITE-VEC-INTEGRATION-PLAN.md#model-recommendations)
+#### Full details
+[docs/SQLITE-VEC-INTEGRATION-PLAN.md](docs/SQLITE-VEC-INTEGRATION-PLAN.md#model-recommendations)
 
 ## 📚 Documentation
 

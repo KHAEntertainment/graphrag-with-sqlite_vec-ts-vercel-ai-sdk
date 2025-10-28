@@ -159,6 +159,11 @@ export class ReciprocalRankFusion {
           repo: result.repo,
           content,
           sources: { graph: rank },
+          metadata: {
+            ...(result.properties || {}),
+            relationship: result.relationship,
+            weight: result.weight,
+          },
         });
       }
     });
@@ -298,7 +303,7 @@ export class ReciprocalRankFusion {
    * Set the k constant
    */
   setK(k: number): void {
-    this.k = k;
+    this.k = Math.max(1, Math.floor(Number.isFinite(k) ? k : 60));
   }
 
   /**

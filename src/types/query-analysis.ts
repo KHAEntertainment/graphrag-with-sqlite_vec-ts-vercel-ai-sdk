@@ -89,6 +89,7 @@ export const WEIGHT_PROFILES: Record<QueryType, SearchWeights> = {
     graph: 0.2,
   },
 };
+Object.freeze(WEIGHT_PROFILES);
 
 /**
  * Validate that weights sum to 1.0 (within epsilon)
