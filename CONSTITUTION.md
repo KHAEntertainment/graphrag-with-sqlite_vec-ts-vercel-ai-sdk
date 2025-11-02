@@ -278,6 +278,175 @@ Total: ~14-15GB RAM
 
 ---
 
+## Resource Management
+
+### Resource Guard System
+
+**Status:** Canonical architectural feature for efficient resource utilization
+
+> **📖 Full Specification:** See [docs/planning/RESOURCE-GUARD-SYSTEM.md](./docs/planning/RESOURCE-GUARD-SYSTEM.md)
+
+The **Resource Guard System** provides intelligent container lifecycle management for DMR-based deployments, enabling GraphRAG to run efficiently on developer machines with limited RAM (16-32GB) by automatically orchestrating model container start/stop operations based on workload requirements.
+
+#### Core Concept
+
+GraphRAG uses 4 different AI models (Triplex, Granite Embedding, Granite 4.0 Micro, optional StructLM) totaling ~10.5GB RAM. The Resource Guard System ensures only required models are loaded at any given time, reducing peak RAM usage by up to 70% without sacrificing functionality.
+
+#### Resource Modes
+
+**Mode 1: Standard** (64GB+ RAM)
+- All containers run continuously
+- No automatic orchestration
+- Maximum performance, zero latency
+- Peak RAM: ~10.5GB
+
+**Mode 2: Efficiency** (16-32GB RAM) - **Default**
+- Maximum 2 models loaded simultaneously
+- Automatic start/stop based on operation type
+- 70% RAM reduction vs. Standard
+- Peak RAM: ~3GB
+
+**Mode 3: Ultra-Efficient** (8-16GB RAM)
+- Only Granite Embedding runs locally (~500MB)
+- Triplex + Granite 4.0 Micro use cloud APIs (HuggingFace Inference)
+- 95% RAM reduction vs. Standard
+- Peak RAM: ~500MB local + cloud API costs
+
+#### Operation-Based Orchestration
+
+**Efficiency Mode Container States:**
+
+| Operation | Running Containers | RAM Usage |
+|-----------|-------------------|-----------|
+| **Indexing** | Triplex + Granite Embedding | ~3GB |
+| **Query** | Granite 4.0 Micro + Granite Embedding | ~3GB |
+| **Idle** | Granite 4.0 Micro (MCP attendant) | ~2.5GB |
+
+**Ultra-Efficient Mode:**
+- Granite Embedding always local (required for both indexing and query)
+- Heavy models (Triplex, Granite 4.0 Micro) routed to cloud APIs
+- Automatic fallback to local if cloud unavailable
+
+#### Configuration
+
+**Environment Variables:**
+```bash
+# Resource mode selection
+DMR_RESOURCE_MODE=efficiency  # standard | efficiency | ultra-efficient
+
+# Container configuration
+DMR_CONTAINER_STARTUP_TIMEOUT=30000  # milliseconds
+DMR_CONTAINER_SHUTDOWN_TIMEOUT=10    # seconds
+
+# Cloud hybrid configuration (ultra-efficient mode)
+HUGGINGFACE_API_KEY=hf_xxxxxxxxxxxxx
+DMR_CLOUD_ROUTED_MODELS=SciPhi/Triplex,ibm-granite/granite-4.0-micro
+```
+
+#### Performance Targets
+
+| Metric | Target |
+|--------|--------|
+| Peak RAM (Efficiency) | ≤ 3GB |
+| Idle RAM | ≤ 2.5GB |
+| Peak RAM (Ultra-Efficient) | ≤ 500MB |
+| Container Startup Time | < 10 seconds |
+| Container Shutdown Time | < 5 seconds |
+| Transition Time (Operation Switch) | < 15 seconds |
+
+#### Architectural Integration
+
+**Core Components:**
+- `src/lib/resource-guard/manager.ts` - Central orchestration
+- `src/lib/resource-guard/container-controller.ts` - Docker lifecycle management (dockerode)
+- `src/lib/resource-guard/health-checker.ts` - Container health verification
+
+**Integration Points:**
+- `src/lib/repository-indexer.ts` - Ensures indexing models before operations
+- `src/mcp/tools/query-engine.ts` - Ensures query models before searches
+- `src/mcp/server.ts` - Initializes Resource Guard, handles graceful shutdown
+
+#### API Example
+
+```typescript
+import { ResourceGuardManager } from './lib/resource-guard/manager.js';
+
+// Initialize with mode
+const resourceGuard = new ResourceGuardManager('efficiency');
+
+// Before indexing operation
+await resourceGuard.ensureModelsForOperation('indexing');
+// → Triplex + Granite Embedding now running
+
+// Perform indexing
+await repositoryIndexer.indexRepository('./my-repo');
+
+// After indexing, transition to idle
+await resourceGuard.transitionToIdle();
+// → Triplex stopped, Granite 4.0 Micro started (MCP ready)
+
+// Before query operation
+await resourceGuard.ensureModelsForOperation('query');
+// → Granite 4.0 Micro + Granite Embedding verified running
+
+// Graceful shutdown
+await resourceGuard.shutdown();
+// → All containers stopped cleanly
+```
+
+#### Design Principles
+
+1. **Automatic Orchestration** - No manual container management required
+2. **Operation-Aware** - Container state matches workload requirements
+3. **Graceful Transitions** - Health checks ensure models ready before operations
+4. **Mode Flexibility** - Single environment variable switches between modes
+5. **Cloud Hybrid Support** - Seamless local/cloud mixing in ultra-efficient mode
+
+#### Resource Mode Selection
+
+**Decision Tree:**
+```
+Available RAM for GraphRAG?
+├─ 10GB+ → Use Standard Mode (maximum performance)
+├─ 5-10GB → Use Efficiency Mode (default, 70% RAM reduction)
+└─ < 5GB → Use Ultra-Efficient Mode (95% RAM reduction, cloud hybrid)
+```
+
+#### Invariants
+
+**These Must Be Maintained:**
+1. Granite Embedding ALWAYS runs locally (required for both indexing and query)
+2. Maximum 2 containers in Efficiency Mode, 1 in Ultra-Efficient Mode
+3. Transitions complete within 15 seconds or throw timeout error
+4. Health checks verify model availability before marking ready
+5. Graceful shutdown stops all containers before exit
+
+#### Cost Estimates (Ultra-Efficient Mode)
+
+**HuggingFace Inference API (as of Nov 2025):**
+- Small repo (~1000 files): ~$0.02
+- Medium repo (~5000 files): ~$0.10
+- Large repo (~20000 files): ~$0.50
+
+**Monthly estimates:**
+- Light dev (1-2 repos): Free (under 100K token tier)
+- Moderate dev (5-10 repos): $0.50 - $2.00
+- Heavy dev (20+ repos): $5.00 - $15.00
+
+#### Implementation Status
+
+**Status:** Planning Phase (Full SDP/PRP completed)
+**Dependencies:** DMR Integration Plan (Phase 1-2 required)
+**Timeline:** 9-14 days implementation (5 phases)
+**Priority:** High (developer accessibility feature)
+
+**References:**
+- Full specification: `docs/planning/RESOURCE-GUARD-SYSTEM.md`
+- DMR integration: `docs/planning/DMR-INTEGRATION-PLAN.md`
+- Model specifications: This document (Resource Requirements section)
+
+---
+
 ## Documentation Hierarchy
 
 All documentation must reference this Constitution and maintain consistency.
