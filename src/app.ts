@@ -131,4 +131,4 @@ async function main(): Promise<void> {
 }
 
 // Run the application
-main();
+void main();

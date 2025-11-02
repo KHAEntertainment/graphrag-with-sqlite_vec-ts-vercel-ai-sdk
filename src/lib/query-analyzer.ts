@@ -23,25 +23,14 @@ import type {
   SearchWeights,
   QueryAnalysisOptions,
 } from '../types/query-analysis.js';
-import {
-  WEIGHT_PROFILES,
-  normalizeWeights,
-  validateWeights,
-} from '../types/query-analysis.js';
+import { WEIGHT_PROFILES, normalizeWeights, validateWeights } from '../types/query-analysis.js';
 import { extractIdentifiers } from '../utils/trigram.js';
 
 /**
  * Zod schema for structured LLM output
  */
 const QueryAnalysisSchema = z.object({
-  query_type: z.enum([
-    'conceptual',
-    'identifier',
-    'relationship',
-    'fuzzy',
-    'pattern',
-    'mixed',
-  ]),
+  query_type: z.enum(['conceptual', 'identifier', 'relationship', 'fuzzy', 'pattern', 'mixed']),
   weights: z.object({
     dense: z.number().min(0).max(1),
     sparse: z.number().min(0).max(1),
@@ -76,10 +65,7 @@ export class QueryAnalyzer {
   /**
    * Analyze a query and determine optimal search weights
    */
-  async analyze(
-    query: string,
-    options: QueryAnalysisOptions = {}
-  ): Promise<QueryAnalysis> {
+  async analyze(query: string, options: QueryAnalysisOptions = {}): Promise<QueryAnalysis> {
     // If type is forced, use pre-defined profile
     if (options.forceType) {
       return this.createAnalysisFromType(query, options.forceType);
@@ -101,10 +87,7 @@ export class QueryAnalyzer {
   /**
    * Analyze query using LLM
    */
-  private async analyzeLLM(
-    query: string,
-    options: QueryAnalysisOptions
-  ): Promise<QueryAnalysis> {
+  private async analyzeLLM(query: string, options: QueryAnalysisOptions): Promise<QueryAnalysis> {
     if (!this.model) {
       throw new Error('No model configured for LLM analysis');
     }
@@ -173,10 +156,7 @@ Weights must sum to 1.0. Be decisive - favor the most relevant strategy heavily.
   /**
    * Build analysis prompt for specific query
    */
-  private buildAnalysisPrompt(
-    query: string,
-    options: QueryAnalysisOptions
-  ): string {
+  private buildAnalysisPrompt(query: string, options: QueryAnalysisOptions): string {
     let prompt = `Analyze this query and determine optimal search weights:\n\n`;
     prompt += `Query: "${query}"\n\n`;
 
@@ -199,10 +179,7 @@ Weights must sum to 1.0. Be decisive - favor the most relevant strategy heavily.
   /**
    * Analyze query using heuristics (fallback when LLM unavailable)
    */
-  private analyzeHeuristic(
-    query: string,
-    options: QueryAnalysisOptions
-  ): Promise<QueryAnalysis> {
+  private analyzeHeuristic(query: string, _options: QueryAnalysisOptions): Promise<QueryAnalysis> {
     const queryLower = query.toLowerCase();
 
     // Extract potential code identifiers
@@ -219,9 +196,7 @@ Weights must sum to 1.0. Be decisive - favor the most relevant strategy heavily.
       'related to',
       'connected to',
     ];
-    const isRelationship = relationshipKeywords.some(kw =>
-      queryLower.includes(kw)
-    );
+    const isRelationship = relationshipKeywords.some((kw) => queryLower.includes(kw));
 
     // Check for conceptual keywords
     const conceptualKeywords = [
@@ -235,12 +210,10 @@ Weights must sum to 1.0. Be decisive - favor the most relevant strategy heavily.
       'example',
       'best practice',
     ];
-    const isConceptual = conceptualKeywords.some(kw =>
-      queryLower.includes(kw)
-    );
+    const isConceptual = conceptualKeywords.some((kw) => queryLower.includes(kw));
 
     // Check for pattern indicators (stricter)
-    const specialsCount = (query.match(/[*+?\[\\\]{}()^$|\\]/g) || []).length;
+    const specialsCount = (query.match(/[*+?[\\\]{}()^$|\\]/g) || []).length;
     const hasPattern = specialsCount >= 2; // reduce false positives
     const hasCodePattern = /\b(?:sk|ghp|gho|pk|tok)[-_][A-Za-z0-9_-]{6,}\b/.test(query);
 
@@ -284,10 +257,7 @@ Weights must sum to 1.0. Be decisive - favor the most relevant strategy heavily.
   /**
    * Create analysis from a forced query type
    */
-  private createAnalysisFromType(
-    query: string,
-    queryType: QueryType
-  ): QueryAnalysis {
+  private createAnalysisFromType(query: string, queryType: QueryType): QueryAnalysis {
     const identifiers = extractIdentifiers(query);
 
     return {
@@ -307,18 +277,21 @@ Weights must sum to 1.0. Be decisive - favor the most relevant strategy heavily.
     options: QueryAnalysisOptions = {}
   ): Promise<QueryAnalysis[]> {
     // Optional: cap concurrency (requires a tiny utility or p-limit)
-    const limit = (fn => {
-      const q: Promise<any>[] = []; const max = 5;
-      return (f: () => Promise<any>) => {
-        const p = (async () => {
+    const limit = (() => {
+      const q: Promise<unknown>[] = [];
+      const max = 5;
+      return (f: () => Promise<unknown>): Promise<unknown> => {
+        const p = (async (): Promise<unknown> => {
           while (q.length >= max) await Promise.race(q);
-          const r = f(); q.push(r.finally(() => q.splice(q.indexOf(r), 1)));
+          const r = f();
+          q.push(r.finally(() => q.splice(q.indexOf(r), 1)));
           return r;
         })();
+        q.push(p);
         return p;
       };
     })();
-    return Promise.all(queries.map(q => limit(() => this.analyze(q, options))));
+    return Promise.all(queries.map((q) => limit(() => this.analyze(q, options))));
   }
 
   /**
@@ -331,10 +304,7 @@ Weights must sum to 1.0. Be decisive - favor the most relevant strategy heavily.
   /**
    * Adjust weights based on additional context
    */
-  adjustWeights(
-    baseWeights: SearchWeights,
-    adjustments: Partial<SearchWeights>
-  ): SearchWeights {
+  adjustWeights(baseWeights: SearchWeights, adjustments: Partial<SearchWeights>): SearchWeights {
     const adjusted = {
       dense: baseWeights.dense,
       sparse: baseWeights.sparse,

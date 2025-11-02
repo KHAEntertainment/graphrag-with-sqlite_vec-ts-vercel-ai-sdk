@@ -1,12 +1,20 @@
 # GraphRAG Architecture: Symbolic vs. Embedding Approach
 
+**Status:** ✅ Hybrid Approach Implemented (Phase 3 Complete - October 28, 2025)
+
 ## Overview
 
-This GraphRAG implementation uses a **symbolic approach** rather than the traditional vector embedding approach for building and querying knowledge graphs. This document explains how it works, why it's different, and potential next steps.
+This GraphRAG implementation has evolved from a **pure symbolic approach** to a **hybrid symbolic + embedding approach** that combines the best of both worlds. This document explains the architecture, implementation status, and how the two approaches work together.
 
-## Key Insight: No Traditional Embeddings Required
+## Key Insight: Hybrid Approach
 
-Unlike typical RAG systems that rely on vector embeddings and cosine similarity for retrieval, this project builds a knowledge graph through **explicit entity and relationship extraction using LLMs**.
+This project builds a knowledge graph through **explicit entity and relationship extraction using LLMs** AND now leverages **vector embeddings** for semantic similarity search. The combination provides:
+- **Symbolic reasoning** - Explicit graph relationships
+- **Semantic search** - Dense vector similarity via sqlite-vec
+- **Keyword search** - Sparse BM25 via FTS5
+- **Pattern matching** - Fuzzy/trigram matching
+
+See `DYNAMIC-HYBRID-SEARCH-INTEGRATION.md` for complete hybrid search architecture.
 
 ## How It Works
 
@@ -128,58 +136,57 @@ Documents → LLM Extraction → Graph DB → Centrality Analysis → LLM Answer
 - [x] LLM-based query answering using centrality
 - [x] Multi-provider support (OpenAI, llama.cpp)
 - [x] TypeScript with full type safety
+- [x] **Vector embeddings (Phase 3 Complete)**
+- [x] **Entity embeddings** - Format: `"name :: kind :: hints"`
+- [x] **Edge embeddings** - Format: `"S <predicate> O :: context"`
+- [x] **sqlite-vec integration** - Vector similarity search
+- [x] **4-way hybrid search** - Dense + Sparse + Pattern + Graph
+- [x] **Dynamic query analysis** - LLM-based strategy weighting
+- [x] **Reciprocal Rank Fusion** - Multi-strategy result combining
 
 ### What's NOT Implemented ❌
 
-- [ ] Vector embeddings
-- [ ] Semantic similarity search
-- [ ] Betweenness centrality (noted as "not calculated" in SQLite)
-- [ ] Closeness centrality (noted as "not calculated" in SQLite)
-- [ ] Hybrid approach (combining embeddings + graph)
+- [ ] Betweenness centrality (could be calculated but currently not used)
+- [ ] Closeness centrality (could be calculated but currently not used)
+- [ ] Advanced graph algorithms (community detection, PageRank)
+- [ ] Temporal analysis (git history integration)
 
-## Potential Next Steps
+## Potential Next Steps (Phase 4+)
 
-### Option 1: Keep Pure Symbolic Approach
+### ✅ Completed: Hybrid Approach (Phase 3)
 
-**Benefits:**
-- Simpler architecture
-- Works well for relationship-heavy domains
-- No need for vector databases
+The hybrid approach combining embeddings + graph is now fully implemented. See:
+- `src/lib/entity-embedder.ts` - Entity embedding generation
+- `src/lib/edge-embedder.ts` - Edge embedding generation
+- `src/lib/repository-indexer.ts` - Complete indexing pipeline
+- `src/mcp/tools/hybrid-search.ts` - 4-way hybrid search
+- `DYNAMIC-HYBRID-SEARCH-INTEGRATION.md` - Architecture details
 
-**Improvements:**
-- Implement betweenness and closeness centrality
-- Add graph visualization tools
-- Optimize LLM prompts for better extraction
-- Add entity deduplication/normalization
+### Option 1: Legilimens CLI Integration (Phase 4 - Planned)
 
-### Option 2: Add Embedding Layer (Hybrid)
+**Automatic Documentation Indexing:**
+- GraphRAG as workspace package in Legilimens monorepo
+- Automatic indexing during `legilimens generate`
+- CLI commands for GraphRAG management
+- Agent instruction file generation
 
-**Benefits:**
-- Combine semantic similarity with graph structure
-- Better retrieval for diverse queries
-- Redundancy if one approach fails
+See: `docs/planning/PHASE-4-INTEGRATION-PLAN.md`
 
-**Implementation:**
-```typescript
-interface HybridRetrieval {
-  // Vector similarity for initial retrieval
-  vectorSearch(query: string): Promise<Document[]>;
-
-  // Graph traversal for related entities
-  graphExpansion(entities: string[]): Promise<Graph>;
-
-  // Combine both approaches
-  hybridQuery(query: string): Promise<Answer>;
-}
-```
-
-### Option 3: Enhanced Graph Analysis
+### Option 2: Enhanced Graph Analysis (Future)
 
 **Add advanced graph algorithms:**
 - Community detection (find topic clusters)
 - PageRank (importance scoring)
-- Path finding (entity connections)
-- Temporal analysis (track knowledge evolution)
+- Path finding (shortest paths between entities)
+- Temporal analysis (track knowledge evolution via git history)
+
+### Option 3: Performance Optimization (Future)
+
+**Scalability improvements:**
+- Parallel file processing with worker threads
+- Incremental indexing with change detection
+- Batch embedding API integration
+- Memory optimization for large repositories
 
 ## Testing Recommendations
 
@@ -279,32 +286,33 @@ The TypeScript version maintains 1:1 feature parity with the Python implementati
 
 No embeddings were used in the original Python version, and none are used in the TypeScript conversion.
 
-## Next Session TODOs
+## Implementation Files
 
-- [ ] Test with a local llama.cpp model
-- [ ] Evaluate entity extraction quality
-- [ ] Decide on embedding integration (yes/no)
-- [ ] Consider implementing missing centrality measures
-- [ ] Profile performance with larger documents
-- [ ] Design TUI interface for graph exploration
+### Core Components
 
-## Questions to Answer
+**Entity & Edge Embedding:**
+- `src/lib/entity-embedder.ts` (277 lines) - Entity embedding generation
+- `src/lib/edge-embedder.ts` (364 lines) - Edge embedding generation
+- `src/lib/repository-indexer.ts` (641 lines) - Complete indexing pipeline
 
-1. **Do we need embeddings for your use case?**
-   - What types of queries do you expect?
-   - Is relationship discovery or semantic search more important?
+**Hybrid Search:**
+- `src/mcp/tools/hybrid-search.ts` - Unified 4-way hybrid search
+- `src/mcp/tools/query-engine.ts` - Individual search strategies
+- `src/lib/query-analyzer.ts` - LLM-based query classification
+- `src/lib/reciprocal-rank-fusion.ts` - RRF fusion algorithm
 
-2. **Should we optimize for accuracy or cost?**
-   - Use GPT-4 for indexing, llama.cpp for queries?
-   - Or llama.cpp for everything?
+**Database:**
+- `src/lib/graph-database.ts` - SQLite connection with sqlite-vec
 
-3. **Database scaling needs?**
-   - How many documents?
-   - How complex are relationships?
-   - Do we need real-time updates?
+**Tests:**
+- `tests/lib/entity-embedder.test.ts` (13 tests)
+- `tests/lib/edge-embedder.test.ts` (17 tests)
+- `tests/lib/repository-indexer.test.ts` (20 tests)
+- `tests/integration/embedding-generation-e2e.test.ts` (21 tests)
 
 ---
 
-**Last Updated:** 2025-10-27
-**Author:** Claude Code Conversion
-**Status:** TypeScript conversion complete, ready for testing
+**Last Updated:** October 29, 2025
+**Status:** Phase 1-3 Complete ✅ | Phase 4 Planned 🔮
+
+See `docs/SQLITE-VEC-STATUS-CURRENT.md` for current project status.

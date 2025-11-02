@@ -26,12 +26,17 @@ export abstract class EmbeddingProvider {
   }
 
   /**
+   * Initialize the embedding model
+   */
+  abstract initialize(): Promise<void>;
+
+  /**
    * Generate embedding for a single text
    */
   abstract embed(text: string, options?: EmbeddingOptions): Promise<Embedding>;
 
   /**
-   * Generate embeddings for multiple texts (batched)
+   * Generate embeddings for a batch of texts
    */
   abstract embedBatch(texts: string[], options?: EmbeddingOptions): Promise<Embedding[]>;
 
@@ -57,7 +62,8 @@ export abstract class EmbeddingProvider {
  * ```
  */
 export class GraniteEmbeddingProvider extends EmbeddingProvider {
-  private pipeline: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private pipeline: any = null;
   private modelName = 'ibm-granite/granite-embedding-125m-english';
   private dimension = 768;
 
@@ -127,7 +133,8 @@ export class GraniteEmbeddingProvider extends EmbeddingProvider {
  * ```
  */
 export class NomicEmbeddingProvider extends EmbeddingProvider {
-  private pipeline: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private pipeline: any = null;
   private modelName = 'nomic-ai/nomic-embed-text-v1.5';
   private dimension = 768;
 
@@ -187,7 +194,8 @@ export class NomicEmbeddingProvider extends EmbeddingProvider {
  * ```
  */
 export class BGEEmbeddingProvider extends EmbeddingProvider {
-  private pipeline: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private pipeline: any = null;
   private modelName = 'BAAI/bge-small-en-v1.5';
   private dimension = 384;
 

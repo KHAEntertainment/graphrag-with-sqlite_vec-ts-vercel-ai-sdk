@@ -1,8 +1,10 @@
 # Embedding Integration Guide
 
+**Status:** ✅ Fully Implemented (Phase 3 Complete - October 28, 2025)
+
 ## Overview
 
-This guide shows how to use the embedding functionality alongside the knowledge graph for semantic search capabilities.
+This guide shows how to use the embedding functionality alongside the knowledge graph for semantic search capabilities. Embeddings are now a **required** component of the GraphRAG system, integrated via sqlite-vec for persistent vector storage and similarity search.
 
 ## Installation
 
@@ -338,10 +340,10 @@ On CPU (Apple M1/M2, modern Intel/AMD):
    - Keep using Phi-4/Granite 4.0 for KG extraction
    - Implement hybrid query mode
 
-3. **Optional: Add sqlite-vec for persistence**
-   - Store embeddings in SQLite
-   - Enable fast vector similarity search
-   - See `docs/HYBRID-ARCHITECTURE-PROPOSAL.md` for full plan
+3. **✅ sqlite-vec integration is complete**
+   - Embeddings stored in SQLite via vec0 virtual table
+   - Fast vector similarity search enabled
+   - See `docs/SQLITE-VEC-STATUS-CURRENT.md` for implementation details
 
 ## Troubleshooting
 
@@ -370,8 +372,20 @@ Can't compare embeddings across different models.
 See inline documentation in:
 - `src/types/embedding.ts` - Type definitions
 - `src/lib/embedding-manager.ts` - Full API with JSDoc comments
+- `src/lib/entity-embedder.ts` - Entity embedding generation (Phase 3)
+- `src/lib/edge-embedder.ts` - Edge embedding generation (Phase 3)
+- `src/lib/repository-indexer.ts` - Complete indexing pipeline (Phase 3)
 - `examples/embedding-integration.ts` - Complete working examples
+
+## Related Documentation
+
+- `SQLITE-VEC-STATUS-CURRENT.md` - Current implementation status
+- `EMBEDDING-ARCHITECTURE.md` - Hybrid symbolic + embedding approach
+- `EDGE_EMBEDDER_USAGE.md` - Edge embedding details
+- `DYNAMIC-HYBRID-SEARCH-INTEGRATION.md` - 4-way hybrid search architecture
+- `docs/planning/PHASE-4-INTEGRATION-PLAN.md` - Future Legilimens integration
 
 ---
 
+**Last Updated:** October 29, 2025
 **Ready to test?** Run: `npm run examples:embedding`

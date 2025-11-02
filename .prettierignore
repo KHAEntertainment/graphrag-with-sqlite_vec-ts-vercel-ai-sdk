@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Data and models
+data/
+models/
+.graphrag/
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.*
+
+# Git
+.git/
+
+# IDE
+.vscode/
+.idea/
+
+# Package manager
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Documentation
+docs/
+*.md

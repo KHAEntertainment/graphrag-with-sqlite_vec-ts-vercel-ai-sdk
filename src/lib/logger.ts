@@ -33,9 +33,7 @@ export class Logger implements ILogger {
 
     // Get log level from environment
     const logLevelEnv = (process.env.LOG_LEVEL?.toUpperCase() || 'INFO') as LogLevel;
-    this.logLevel = ['DEBUG', 'INFO', 'WARN', 'ERROR'].includes(logLevelEnv)
-      ? logLevelEnv
-      : 'INFO';
+    this.logLevel = ['DEBUG', 'INFO', 'WARN', 'ERROR'].includes(logLevelEnv) ? logLevelEnv : 'INFO';
     this.minLevel = LOG_LEVELS[this.logLevel];
 
     // Ensure log directory exists
@@ -52,9 +50,11 @@ export class Logger implements ILogger {
 
   private formatMessage(level: LogLevel, message: string, args: unknown[]): string {
     const timestamp = new Date().toISOString();
-    const argsStr = args.length > 0 ? ' ' + args.map(arg =>
-      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-    ).join(' ') : '';
+    const argsStr =
+      args.length > 0
+        ? ' ' +
+          args.map((arg) => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg))).join(' ')
+        : '';
     return `${timestamp} - ${this.namespace} - ${level} - ${message}${argsStr}`;
   }
 
@@ -68,10 +68,14 @@ export class Logger implements ILogger {
     const formattedMessage = this.formatMessage(level, message, args);
 
     // Console output
-    const consoleMethod = level === 'ERROR' ? console.error :
-                         level === 'WARN' ? console.warn :
-                         level === 'DEBUG' ? console.debug :
-                         console.log;
+    const consoleMethod =
+      level === 'ERROR'
+        ? console.error
+        : level === 'WARN'
+          ? console.warn
+          : level === 'DEBUG'
+            ? console.debug
+            : console.log;
     consoleMethod(formattedMessage);
 
     // File output
@@ -83,19 +87,19 @@ export class Logger implements ILogger {
   }
 
   debug(message: string, ...args: unknown[]): void {
-    this.log('DEBUG', message, args);
+    void this.log('DEBUG', message, args);
   }
 
   info(message: string, ...args: unknown[]): void {
-    this.log('INFO', message, args);
+    void this.log('INFO', message, args);
   }
 
   warn(message: string, ...args: unknown[]): void {
-    this.log('WARN', message, args);
+    void this.log('WARN', message, args);
   }
 
   error(message: string, ...args: unknown[]): void {
-    this.log('ERROR', message, args);
+    void this.log('ERROR', message, args);
   }
 
   getLogger(): ILogger {

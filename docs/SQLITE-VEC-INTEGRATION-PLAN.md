@@ -1,8 +1,26 @@
 # Complete SQLite-Vec Integration Plan
 
+**Status:** ✅ Phase 1-3 Complete (October 28, 2025) | 🔮 Phase 4+ Planned
+
 ## Overview
 
 This document outlines the complete integration of sqlite-vec into the GraphRAG system. This is the **core intent** of the project - combining graph relationships with semantic vector search in a single local SQLite database.
+
+**Implementation Status:**
+- ✅ **Phase 1:** Database setup with sqlite-vec extension (Complete)
+- ✅ **Phase 2:** Core integration with dense search (Complete)
+- ✅ **Phase 3:** Entity & edge embedding generation (Complete)
+- 🔮 **Phase 4:** Legilimens CLI integration (Planned - see `docs/planning/PHASE-4-INTEGRATION-PLAN.md`)
+
+**Current Capabilities:**
+- sqlite-vec extension loaded and verified (v0.1.6)
+- Entity embeddings with "name :: kind :: hints" format
+- Edge embeddings with "S <predicate> O :: context" format
+- 4-way hybrid search (dense + sparse + pattern + graph)
+- Dynamic query analysis with RRF fusion
+- Repository indexing pipeline with batch processing
+
+See `docs/SQLITE-VEC-STATUS-CURRENT.md` for detailed current status.
 
 ## Architecture
 

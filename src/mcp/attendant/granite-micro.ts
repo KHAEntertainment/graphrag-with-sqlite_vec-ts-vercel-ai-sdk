@@ -5,15 +5,15 @@
  * Provides "surgical precision" - only returns what the coding agent needs.
  */
 
-import { generateText } from "ai";
-import type { LanguageModelV1 } from "ai";
+import { generateText } from 'ai';
+import type { LanguageModelV1 } from 'ai';
 import type {
   CombinedResults,
   SemanticResult,
   GraphResult,
-  CrossReference
-} from "../tools/query-engine.js";
-import { Logger } from "../../lib/logger.js";
+  CrossReference,
+} from '../tools/query-engine.js';
+import { Logger } from '../../lib/logger.js';
 
 /**
  * Attendant filtering options
@@ -28,7 +28,7 @@ export interface AttendantFilterOptions {
   /** Maximum tokens in filtered response */
   maxTokens?: number;
   /** Priority: breadth (cover more) vs depth (detail) */
-  priority?: "breadth" | "depth";
+  priority?: 'breadth' | 'depth';
 }
 
 /**
@@ -71,20 +71,12 @@ export class GraniteAttendant {
    */
   async filter(options: AttendantFilterOptions): Promise<FilteredResponse> {
     if (!this.model) {
-      this.logger.warn(
-        "No model configured for attendant, returning raw results"
-      );
+      this.logger.warn('No model configured for attendant, returning raw results');
       return this.formatRawResults(options);
     }
     const model = this.model;
 
-    const {
-      query,
-      context,
-      results,
-      maxTokens = 500,
-      priority = "breadth",
-    } = options;
+    const { query, context, results, maxTokens = 500, priority = 'breadth' } = options;
 
     const originalTokens = results.totalTokens;
 
@@ -117,14 +109,15 @@ export class GraniteAttendant {
         efficiency: {
           originalTokens,
           filteredTokens,
-          reductionPercent: originalTokens > 0
-            ? Math.round(((originalTokens - filteredTokens) / originalTokens) * 100)
-            : 0,
+          reductionPercent:
+            originalTokens > 0
+              ? Math.round(((originalTokens - filteredTokens) / originalTokens) * 100)
+              : 0,
         },
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error filtering results:", errorMessage);
+      this.logger.error('Error filtering results:', errorMessage);
 
       // Fallback to raw results if filtering fails
       return this.formatRawResults(options);
@@ -139,7 +132,7 @@ export class GraniteAttendant {
     context?: string | undefined;
     results: CombinedResults;
     maxTokens: number;
-    priority: "breadth" | "depth";
+    priority: 'breadth' | 'depth';
   }): string {
     const { query, context, results, maxTokens, priority } = options;
 
@@ -150,9 +143,9 @@ export class GraniteAttendant {
     return `You are a coding assistant's research attendant. Your job is to provide ONLY the most relevant information with surgical precision.
 
 **Agent's Query:** "${query}"
-${context ? `**Agent's Goal:** ${context}` : ""}
+${context ? `**Agent's Goal:** ${context}` : ''}
 **Context Budget:** ${maxTokens} tokens (strict limit)
-**Priority:** ${priority === "breadth" ? "Cover key points briefly" : "Deep detail on most relevant"}
+**Priority:** ${priority === 'breadth' ? 'Cover key points briefly' : 'Deep detail on most relevant'}
 
 **Full GraphRAG Results:**
 
@@ -182,9 +175,9 @@ Extract ONLY information directly relevant to the agent's query and goal.
 - [Second most important fact]
 - [Third most important fact]
 
-${priority === "breadth" ? "" : `# Details\n[Deeper explanation if needed]\n`}
-${results.semantic.length > 0 ? `# Code Example\n[If relevant, include a brief code snippet]\n` : ""}
-${results.crossRefs.length > 0 ? `# Cross-Repository Integration\n[How projects work together, if applicable]\n` : ""}
+${priority === 'breadth' ? '' : `# Details\n[Deeper explanation if needed]\n`}
+${results.semantic.length > 0 ? `# Code Example\n[If relevant, include a brief code snippet]\n` : ''}
+${results.crossRefs.length > 0 ? `# Cross-Repository Integration\n[How projects work together, if applicable]\n` : ''}
 
 Remember: The agent has limited context. Every token counts. Be precise and actionable.`;
   }
@@ -194,17 +187,17 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
    */
   private formatSemanticResults(results: SemanticResult[]): string {
     if (results.length === 0) {
-      return "**Semantic Search:** No results";
+      return '**Semantic Search:** No results';
     }
 
     const formatted = results
       .slice(0, 10) // Top 10 results
       .map((r, i) => {
-        const sim = typeof r.distance === "number" ? (1 - r.distance).toFixed(2) : "N/A";
-        const text = typeof r.content === "string" ? r.content : JSON.stringify(r.content ?? "");
-        return `${i + 1}. **${r.repo}** (similarity: ${sim})\n   ${text.slice(0, 200)}${text.length > 200 ? "..." : ""}`;
+        const sim = typeof r.distance === 'number' ? (1 - r.distance).toFixed(2) : 'N/A';
+        const text = typeof r.content === 'string' ? r.content : JSON.stringify(r.content ?? '');
+        return `${i + 1}. **${r.repo}** (similarity: ${sim})\n   ${text.slice(0, 200)}${text.length > 200 ? '...' : ''}`;
       })
-      .join("\n\n");
+      .join('\n\n');
 
     return `**Semantic Search Results (${results.length} total, showing top 10):**\n\n${formatted}`;
   }
@@ -214,23 +207,30 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
    */
   private formatGraphResults(results: GraphResult[]): string {
     if (results.length === 0) {
-      return "**Graph Query:** No results";
+      return '**Graph Query:** No results';
     }
 
     const formatted = results
       .slice(0, 10) // Top 10 results
       .map((r, i) => {
-        const rawProps = typeof r.properties === "string"
-          ? ((): Record<string, unknown> => { try { return JSON.parse(r.properties); } catch { return {}; } })()
-          : (r.properties ?? {});
+        const rawProps =
+          typeof r.properties === 'string'
+            ? ((): Record<string, unknown> => {
+                try {
+                  return JSON.parse(r.properties);
+                } catch {
+                  return {};
+                }
+              })()
+            : (r.properties ?? {});
         const props = Object.entries(rawProps as Record<string, unknown>)
           .slice(0, 3)
           .map(([k, v]) => `${k}: ${v}`)
-          .join(", ");
+          .join(', ');
 
-        return `${i + 1}. **${r.id}** (${r.repo})\n   Properties: ${props}${r.relationship ? `\n   Relationship: ${r.relationship} (weight: ${r.weight})` : ""}`;
+        return `${i + 1}. **${r.id}** (${r.repo})\n   Properties: ${props}${r.relationship ? `\n   Relationship: ${r.relationship} (weight: ${r.weight})` : ''}`;
       })
-      .join("\n\n");
+      .join('\n\n');
 
     return `**Knowledge Graph Results (${results.length} total, showing top 10):**\n\n${formatted}`;
   }
@@ -240,16 +240,16 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
    */
   private formatCrossReferences(results: CrossReference[]): string {
     if (results.length === 0) {
-      return "**Cross-Repository References:** None found";
+      return '**Cross-Repository References:** None found';
     }
 
     const formatted = results
       .slice(0, 5) // Top 5 refs
       .map((r, i) => {
-        const s = typeof r.strength === "number" ? r.strength.toFixed(2) : "N/A";
+        const s = typeof r.strength === 'number' ? r.strength.toFixed(2) : 'N/A';
         return `${i + 1}. **${r.from_repo}/${r.from_entity}** → **${r.to_repo}/${r.to_entity}**\n   Type: ${r.type}, Strength: ${s}`;
       })
-      .join("\n\n");
+      .join('\n\n');
 
     return `**Cross-Repository References (${results.length} total, showing top 5):**\n\n${formatted}`;
   }
@@ -261,16 +261,16 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
     const repos = new Set<string>();
 
     for (const r of results.semantic) {
-      if (typeof r.repo === "string" && r.repo) repos.add(r.repo);
+      if (typeof r.repo === 'string' && r.repo) repos.add(r.repo);
     }
 
     for (const r of results.graph) {
-      if (typeof r.repo === "string" && r.repo) repos.add(r.repo);
+      if (typeof r.repo === 'string' && r.repo) repos.add(r.repo);
     }
 
     for (const r of results.crossRefs) {
-      if (typeof r.from_repo === "string" && r.from_repo) repos.add(r.from_repo);
-      if (typeof r.to_repo === "string" && r.to_repo) repos.add(r.to_repo);
+      if (typeof r.from_repo === 'string' && r.from_repo) repos.add(r.from_repo);
+      if (typeof r.to_repo === 'string' && r.to_repo) repos.add(r.to_repo);
     }
 
     return Array.from(repos);
@@ -288,9 +288,7 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
   /**
    * Format raw results when model is not available
    */
-  private formatRawResults(
-    options: AttendantFilterOptions
-  ): FilteredResponse {
+  private formatRawResults(options: AttendantFilterOptions): FilteredResponse {
     const { results } = options;
 
     const repositories = this.extractRepositories(results);
@@ -302,7 +300,7 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
       for (const r of results.semantic.slice(0, 5)) {
         answer += `- **${r.repo}**: ${r.content.slice(0, 150)}...\n`;
       }
-      answer += "\n";
+      answer += '\n';
     }
 
     if (results.graph.length > 0) {
@@ -310,7 +308,7 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
       for (const r of results.graph.slice(0, 5)) {
         answer += `- **${r.id}** (${r.repo})\n`;
       }
-      answer += "\n";
+      answer += '\n';
     }
 
     if (results.crossRefs.length > 0) {
@@ -328,9 +326,10 @@ Remember: The agent has limited context. Every token counts. Be precise and acti
       efficiency: {
         originalTokens: results.totalTokens,
         filteredTokens,
-        reductionPercent: results.totalTokens > 0
-          ? Math.round(((results.totalTokens - filteredTokens) / results.totalTokens) * 100)
-          : 0,
+        reductionPercent:
+          results.totalTokens > 0
+            ? Math.round(((results.totalTokens - filteredTokens) / results.totalTokens) * 100)
+            : 0,
       },
     };
   }
@@ -358,16 +357,14 @@ export class GeminiAttendant {
   async filter(options: AttendantFilterOptions): Promise<FilteredResponse> {
     // TODO: Implement Gemini API integration
     // For now, return a placeholder
-    this.logger.warn(
-      "Gemini 2.5 Pro attendant not yet implemented, using basic formatting"
-    );
+    this.logger.warn('Gemini 2.5 Pro attendant not yet implemented, using basic formatting');
 
     const graniteAttendant = new GraniteAttendant();
     const result = await graniteAttendant.filter(options);
-    
+
     // Indicate fallback in result for observability (Gemini not implemented yet)
     // The warning log above provides observability for debugging
-    
+
     return result;
   }
 

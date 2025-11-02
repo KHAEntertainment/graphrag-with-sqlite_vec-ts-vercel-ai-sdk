@@ -21,8 +21,11 @@ Perfect for coding assistants, documentation search, and knowledge management.
 ### TypeScript Implementation (This Repo)
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies (with workaround for llamacpp-ai-provider)
+npm run install-deps
+
+# Or manually:
+npm install --ignore-scripts
 
 # Configure your AI provider
 cp .env.example .env
@@ -33,6 +36,28 @@ npm run dev
 
 # Or run embedding examples
 npm run examples:embedding
+```
+
+> **⚠️ npm install workaround:** The `llamacpp-ai-provider` package has a broken postinstall script. Use `npm run install-deps` or `npm install --ignore-scripts` instead of plain `npm install`.
+
+### Development Commands
+
+```bash
+# Code Quality
+npm run lint              # Check for linting errors
+npm run lint:fix          # Auto-fix linting issues
+npm run format            # Format code with Prettier
+npm run format:check      # Check code formatting
+npm run typecheck         # Run TypeScript type checking
+npm run validate          # Run lint + typecheck
+
+# Building
+npm run build             # Build for production
+npm run prebuild          # Runs validation before build
+
+# Development
+npm run dev               # Run with hot reload
+npm run examples:embedding # Run embedding examples
 ```
 
 **📘 Full Documentation:** [README-TYPESCRIPT.md](README-TYPESCRIPT.md)
@@ -76,6 +101,97 @@ Documents → Chunking
 
 **Learn more:** [docs/EMBEDDING-ARCHITECTURE.md](docs/EMBEDDING-ARCHITECTURE.md)
 
+## 🚀 Usage Examples
+
+### Index a Repository with Embeddings
+
+```typescript
+import { RepositoryIndexer } from './src/lib/repository-indexer.js';
+import { GraphDatabaseConnection } from './src/lib/graph-database.js';
+import { EmbeddingManager } from './src/lib/embedding-manager.js';
+import { Logger } from './src/lib/logger.js';
+import { llamacpp } from 'llamacpp-ai-provider';
+
+// Setup database and logger
+const db = new GraphDatabaseConnection('./data/graph.db');
+const logger = new Logger('Index', './logs', 'index.log');
+
+// Configure embedding provider (IBM Granite Embedding 125M)
+const embeddingProvider = /* your embedding provider */;
+const embeddingManager = new EmbeddingManager(embeddingProvider, logger);
+
+// Configure LLM for entity extraction (IBM Granite 3.1 2B)
+const model = llamacpp('granite-3.1-2b-q8_0.gguf');
+
+// Create indexer and register repository
+const indexer = new RepositoryIndexer(db, logger, embeddingManager, model);
+indexer.registerRepository({
+  id: 'my-project',
+  name: 'My TypeScript Project',
+  version: '1.0.0',
+});
+
+// Index repository (extracts entities, builds graph, generates embeddings)
+await indexer.indexRepository('my-project', './path/to/project');
+
+// Result:
+// - Entities and edges extracted from code
+// - Knowledge graph built in SQLite
+// - Embeddings generated for entities ("name :: kind :: hints")
+// - Embeddings generated for edges ("S <predicate> O :: context")
+```
+
+### Query with Semantic Search
+
+```typescript
+import { QueryEngine } from './src/mcp/tools/query-engine.js';
+
+const queryEngine = new QueryEngine(db.getSession(), embeddingManager, logger);
+
+// Generate query embedding
+const query = 'authentication module user session';
+const queryEmbedding = await embeddingManager.embedChunk({
+  id: 'query',
+  content: query,
+});
+
+// Semantic search using generated embeddings
+const results = await queryEngine.queryLocalEmbeddings(
+  queryEmbedding.embedding!,
+  {
+    repositories: ['my-project'],
+    maxResults: 10,
+    minSimilarity: 0.7,
+  }
+);
+
+console.log(`Found ${results.length} relevant results`);
+// Returns: Entity embeddings, edge embeddings, and document chunks
+```
+
+### Hybrid Search (All Strategies)
+
+```typescript
+import { HybridSearchEngine } from './src/mcp/tools/hybrid-search.js';
+import { QueryAnalyzer } from './src/lib/query-analyzer.js';
+
+const queryAnalyzer = new QueryAnalyzer(model, logger);
+const hybridSearch = new HybridSearchEngine(db, embeddingManager, model, logger);
+
+// Analyze query to determine optimal search weights
+const query = 'How does authentication work?';
+const analysis = await queryAnalyzer.analyzeQuery(query);
+
+// Perform hybrid search (dense + sparse + pattern + graph)
+const hybridResults = await hybridSearch.search(query, {
+  repositories: ['my-project'],
+  maxResults: 20,
+});
+
+// Results fused from all search strategies using RRF
+console.log(`Found ${hybridResults.length} results (RRF fused)`);
+```
+
 ## 🤖 Recommended Models
 
 Based on extensive research, these models provide optimal performance for GraphRAG:
@@ -113,6 +229,7 @@ Based on extensive research, these models provide optimal performance for GraphR
 | Document | Description |
 |----------|-------------|
 | [README-TYPESCRIPT.md](README-TYPESCRIPT.md) | Complete TypeScript setup and usage guide |
+| [docs/PHASE-3-COMPLETION-SUMMARY.md](docs/PHASE-3-COMPLETION-SUMMARY.md) | Phase 3: Entity & Edge Embedding Generation (complete) |
 | [docs/EMBEDDING-USAGE.md](docs/EMBEDDING-USAGE.md) | Embedding integration guide |
 | [docs/EMBEDDING-ARCHITECTURE.md](docs/EMBEDDING-ARCHITECTURE.md) | Symbolic vs. embedding approach explained |
 | [docs/HYBRID-ARCHITECTURE-PROPOSAL.md](docs/HYBRID-ARCHITECTURE-PROPOSAL.md) | Future hybrid system design |

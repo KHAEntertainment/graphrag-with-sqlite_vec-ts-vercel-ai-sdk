@@ -21,3 +21,6 @@ logs/
 !package.json
 !tsconfig.json
 !public/*.json
+
+# Documentation archives
+docs/.archive/

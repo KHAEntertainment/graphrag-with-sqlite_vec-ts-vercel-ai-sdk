@@ -8,12 +8,12 @@
  * Query type classification
  */
 export type QueryType =
-  | 'conceptual'      // Broad questions about concepts ("How do I stream AI responses?")
-  | 'identifier'      // Specific code identifiers ("Find StreamingTextResponse class")
-  | 'relationship'    // Dependency questions ("What uses useChat hook?")
-  | 'fuzzy'           // Contains typos or partial matches ("StreamingTxtResp")
-  | 'pattern'         // Pattern-based searches ("Find API keys like sk-proj-xxxx")
-  | 'mixed';          // Combination of multiple types
+  | 'conceptual' // Broad questions about concepts ("How do I stream AI responses?")
+  | 'identifier' // Specific code identifiers ("Find StreamingTextResponse class")
+  | 'relationship' // Dependency questions ("What uses useChat hook?")
+  | 'fuzzy' // Contains typos or partial matches ("StreamingTxtResp")
+  | 'pattern' // Pattern-based searches ("Find API keys like sk-proj-xxxx")
+  | 'mixed'; // Combination of multiple types
 
 /**
  * Search strategy weights

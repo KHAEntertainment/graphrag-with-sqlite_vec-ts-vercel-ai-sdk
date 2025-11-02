@@ -22,6 +22,7 @@
 import type { Database } from 'better-sqlite3';
 import type { LanguageModelV1 } from 'ai';
 import { QueryEngine } from './query-engine.js';
+import type { SemanticResult, SparseResult, PatternResult, GraphResult } from './query-engine.js';
 import { QueryAnalyzer, createQueryAnalyzer } from '../../lib/query-analyzer.js';
 import { ReciprocalRankFusion, createRRF } from '../../lib/reciprocal-rank-fusion.js';
 import type { FusedResult } from '../../lib/reciprocal-rank-fusion.js';
@@ -101,10 +102,7 @@ export class HybridSearchEngine {
   /**
    * Perform hybrid search with dynamic strategy weighting
    */
-  async search(
-    query: string,
-    options: HybridSearchOptions = {}
-  ): Promise<HybridSearchResult> {
+  async search(query: string, options: HybridSearchOptions = {}): Promise<HybridSearchResult> {
     const startTime = Date.now();
 
     // Step 1: Analyze query to determine weights
@@ -115,17 +113,15 @@ export class HybridSearchEngine {
     );
     this.logger.info(
       `Weights: dense=${analysis.weights.dense}, sparse=${analysis.weights.sparse}, ` +
-      `pattern=${analysis.weights.pattern}, graph=${analysis.weights.graph}`
+        `pattern=${analysis.weights.pattern}, graph=${analysis.weights.graph}`
     );
 
     // Step 2: Execute all search strategies in parallel
-    const {
-      semantic,
-      sparse,
-      pattern,
-      graph,
-      metrics,
-    } = await this.executeSearches(query, analysis.weights, options);
+    const { semantic, sparse, pattern, graph, metrics } = await this.executeSearches(
+      query,
+      analysis.weights,
+      options
+    );
 
     // Step 3: Fuse results with RRF
     const fusionStart = Date.now();
@@ -154,9 +150,10 @@ export class HybridSearchEngine {
     // Step 5: Generate explanations if requested
     let explanations: string[] | undefined;
     if (options.explain) {
-      explanations = fusedResults.map(result =>
-        `Fused score=${result.score.toFixed(4)}\n` +
-        this.rrf.explainRanking(result, analysis.weights)
+      explanations = fusedResults.map(
+        (result) =>
+          `Fused score=${result.score.toFixed(4)}\n` +
+          this.rrf.explainRanking(result, analysis.weights)
       );
     }
 
@@ -178,10 +175,7 @@ export class HybridSearchEngine {
   /**
    * Analyze query to determine search strategy weights
    */
-  private async analyzeQuery(
-    query: string,
-    options: HybridSearchOptions
-  ): Promise<QueryAnalysis> {
+  private async analyzeQuery(query: string, options: HybridSearchOptions): Promise<QueryAnalysis> {
     if (options.forceWeights) {
       return {
         query_type: options.forceQueryType || 'mixed',
@@ -204,117 +198,115 @@ export class HybridSearchEngine {
     query: string,
     weights: SearchWeights,
     options: HybridSearchOptions
-  ) {
-    const promises: Promise<any>[] = [];
+  ): Promise<[SemanticResult[], SparseResult[], PatternResult[], GraphResult[]]> {
+    const promises: [
+      Promise<SemanticResult[]>,
+      Promise<SparseResult[]>,
+      Promise<PatternResult[]>,
+      Promise<GraphResult[]>,
+    ] = [Promise.resolve([]), Promise.resolve([]), Promise.resolve([]), Promise.resolve([])];
     const timings: number[] = [];
 
     // Dense (semantic) search
-    promises.push(
-      (async () => {
-        const cutoff = 0.05;
-        if ((weights.dense ?? 0) < cutoff || !this.embeddingProvider) {
-          return [];
-        }
+    promises[0] = (async (): Promise<SemanticResult[]> => {
+      const cutoff = 0.05;
+      if ((weights.dense ?? 0) < cutoff || !this.embeddingProvider) {
+        return [];
+      }
 
-        const start = Date.now();
-        try {
-          const embedding = await this.embeddingProvider.embed(query);
-          const results = await this.queryEngine.queryLocalEmbeddings(
-            embedding,
-            { repositories: options.repositories, maxResults: options.maxResults ?? 20 }
-          );
-          timings[0] = Date.now() - start;
-          return results;
-        } catch (error) {
-          this.logger.warn('Dense search failed:', error);
-          timings[0] = Date.now() - start;
-          return [];
-        }
-      })()
-    );
+      const start = Date.now();
+      try {
+        const embedding = await this.embeddingProvider.embed(query);
+        const results = await this.queryEngine.queryLocalEmbeddings(embedding, {
+          repositories: options.repositories,
+          maxResults: options.maxResults ?? 20,
+        });
+        timings[0] = Date.now() - start;
+        return results;
+      } catch (error) {
+        this.logger.warn('Dense search failed:', error);
+        timings[0] = Date.now() - start;
+        return [];
+      }
+    })();
 
     // Sparse (keyword) search
-    promises.push(
-      (async () => {
-        const cutoff = 0.05;
-        if ((weights.sparse ?? 0) < cutoff) {
-          return [];
-        }
+    promises[1] = (async (): Promise<SparseResult[]> => {
+      const cutoff = 0.05;
+      if ((weights.sparse ?? 0) < cutoff) {
+        return [];
+      }
 
-        const start = Date.now();
-        try {
-          const results = await this.queryEngine.querySparse(
-            query,
-            { repositories: options.repositories, maxResults: options.maxResults ?? 20 }
-          );
-          timings[1] = Date.now() - start;
-          return results;
-        } catch (error) {
-          this.logger.warn('Sparse search failed:', error);
-          timings[1] = Date.now() - start;
-          return [];
-        }
-      })()
-    );
+      const start = Date.now();
+      try {
+        const results = await this.queryEngine.querySparse(query, {
+          repositories: options.repositories,
+          maxResults: options.maxResults ?? 20,
+        });
+        timings[1] = Date.now() - start;
+        return results;
+      } catch (error) {
+        this.logger.warn('Sparse search failed:', error);
+        timings[1] = Date.now() - start;
+        return [];
+      }
+    })();
 
     // Pattern (fuzzy) search
-    promises.push(
-      (async () => {
-        const cutoff = 0.05;
-        if ((weights.pattern ?? 0) < cutoff) {
-          return [];
-        }
+    promises[2] = (async (): Promise<PatternResult[]> => {
+      const cutoff = 0.05;
+      if ((weights.pattern ?? 0) < cutoff) {
+        return [];
+      }
 
-        const start = Date.now();
-        try {
-          // Use fuzzy search for better results
-          const results = await this.queryEngine.queryFuzzy(
-            query,
-            { repositories: options.repositories, maxResults: options.maxResults ?? 20, threshold: 0.6 }
-          );
-          timings[2] = Date.now() - start;
-          return results;
-        } catch (error) {
-          this.logger.warn('Pattern search failed:', error);
-          timings[2] = Date.now() - start;
-          return [];
-        }
-      })()
-    );
+      const start = Date.now();
+      try {
+        // Use fuzzy search for better results
+        const results = await this.queryEngine.queryFuzzy(query, {
+          repositories: options.repositories,
+          maxResults: options.maxResults ?? 20,
+          threshold: 0.6,
+        });
+        timings[2] = Date.now() - start;
+        return results;
+      } catch (error) {
+        this.logger.warn('Pattern search failed:', error);
+        timings[2] = Date.now() - start;
+        return [];
+      }
+    })();
 
     // Graph (relationship) search
-    promises.push(
-      (async () => {
-        const cutoff = 0.05;
-        if ((weights.graph ?? 0) < cutoff) {
-          return [];
-        }
+    promises[3] = (async (): Promise<GraphResult[]> => {
+      const cutoff = 0.05;
+      if ((weights.graph ?? 0) < cutoff) {
+        return [];
+      }
 
-        const start = Date.now();
-        try {
-          const entities = this.queryEngine.extractEntities(query);
-          const results = await this.queryEngine.queryLocalGraph(
-            entities,
-            { repositories: options.repositories }
-          );
-          const limited = (options.maxResults && results.length > options.maxResults)
+      const start = Date.now();
+      try {
+        const entities = this.queryEngine.extractEntities(query);
+        const results = await this.queryEngine.queryLocalGraph(entities, {
+          repositories: options.repositories,
+        });
+        const limited =
+          options.maxResults && results.length > options.maxResults
             ? results.slice(0, options.maxResults)
             : results;
-          timings[3] = Date.now() - start;
-          return limited;
-        } catch (error) {
-          this.logger.warn('Graph search failed:', error);
-          timings[3] = Date.now() - start;
-          return [];
-        }
-      })()
-    );
+        timings[3] = Date.now() - start;
+        return limited;
+      } catch (error) {
+        this.logger.warn('Graph search failed:', error);
+        timings[3] = Date.now() - start;
+        return [];
+      }
+    })();
 
     const [semantic, sparse, pattern, graph] = await Promise.all(promises);
 
     this.logger.info(
       `Search results: dense=${semantic.length}, sparse=${sparse.length}, ` +
-      `pattern=${pattern.length}, graph=${graph.length}`
+        `pattern=${pattern.length}, graph=${graph.length}`
     );
 
     return {

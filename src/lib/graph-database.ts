@@ -17,11 +17,14 @@
  */
 
 import Database from 'better-sqlite3';
+import { join } from 'path';
 import type { GraphNode, GraphEdge } from '../types/index.js';
 import { generateTrigrams } from '../utils/trigram.js';
+import { MigrationRunner, allMigrations } from './migrations/index.js';
 
 export class GraphDatabaseConnection {
   private db: Database.Database;
+  private vecExtensionLoaded: boolean = false;
 
   constructor(dbPath: string = 'data/graph_database.sqlite') {
     if (!dbPath) {
@@ -32,11 +35,77 @@ export class GraphDatabaseConnection {
 
     // Use WAL mode for better performance
     this.db.pragma('journal_mode = WAL');
-    
+
     // Enforce foreign keys (needed for declared FKs and cascades)
     this.db.pragma('foreign_keys = ON');
 
+    // Load sqlite-vec extension before schema initialization
+    this.loadVecExtension();
+
+    // Initialize base schema first
     this.initializeSchema();
+
+    // Run migrations after base schema exists
+    this.runMigrations();
+  }
+
+  /**
+   * Load sqlite-vec extension for vector operations
+   */
+  private loadVecExtension(): void {
+    try {
+      // Platform detection
+      const platform = process.platform;
+      const arch = process.arch;
+      
+      // Note: better-sqlite3 automatically adds the platform-specific extension (.dylib/.dll/.so)
+      // so we pass 'vec0' without extension
+      const extensionBaseName = 'vec0';
+      
+      // Try multiple possible locations
+      // Handle both development (src/lib/) and production (build/lib/) paths
+      const possiblePaths = [
+        // Production build (from build/lib/graph-database.js)
+        join(process.cwd(), 'lib/sqlite-vec', extensionBaseName),
+        // Development with tsx (from src/lib/graph-database.ts)
+        join(process.cwd(), 'lib/sqlite-vec', extensionBaseName),
+        // Platform-specific subdirectory
+        join(process.cwd(), 'lib/sqlite-vec', `${platform}-${arch}`, extensionBaseName),
+        join(process.cwd(), 'lib/sqlite-vec', `${platform}-${arch}`, extensionBaseName),
+      ];
+      
+      let loaded = false;
+      for (const path of possiblePaths) {
+        try {
+          this.db.loadExtension(path);
+          this.vecExtensionLoaded = true;
+          loaded = true;
+          console.log(`✓ Loaded sqlite-vec extension from: ${path}`);
+          break;
+        } catch (err) {
+          // Try next path
+          continue;
+        }
+      }
+      
+      if (!loaded) {
+        console.warn('sqlite-vec extension not found in expected locations');
+        console.warn('Semantic search will be disabled');
+        this.vecExtensionLoaded = false;
+      }
+    } catch (error) {
+      console.warn('Failed to load sqlite-vec extension:', error);
+      console.warn('Semantic search will be disabled');
+      this.vecExtensionLoaded = false;
+    }
+  }
+
+  /**
+   * Run database migrations
+   */
+  private runMigrations(): void {
+    const migrationRunner = new MigrationRunner(this.db);
+    migrationRunner.runMigrations(allMigrations);
   }
 
   /**
@@ -87,8 +156,8 @@ export class GraphDatabaseConnection {
           tokenize='porter unicode61'
         )
       `);
-    } catch (error) {
-      console.warn('Failed to create FTS5 table (sparse search will be unavailable):', error);
+    } catch {
+      // FTS5 not available - sparse search will be disabled
     }
 
     // Create trigram table for fuzzy matching
@@ -121,6 +190,30 @@ export class GraphDatabaseConnection {
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS chunks_trigram_idx ON chunks_trigram(trigram)
     `);
+
+    // Create embeddings virtual table (only if sqlite-vec loaded)
+    if (this.vecExtensionLoaded) {
+      try {
+        console.log('Creating embeddings virtual table with vec0...');
+        this.db.exec(`
+          CREATE VIRTUAL TABLE IF NOT EXISTS embeddings USING vec0(
+            chunk_id TEXT PRIMARY KEY,
+            repo TEXT,
+            entity_id TEXT,
+            chunk_type TEXT CHECK(chunk_type IN ('entity', 'edge', 'documentation', 'code', 'comment')),
+            content TEXT,
+            embedding FLOAT[768],
+            metadata TEXT
+          )
+        `);
+        
+        console.log('✓ Embeddings table created successfully');
+      } catch (error) {
+        console.warn('Failed to create embeddings virtual table:', error);
+        console.warn('Semantic search will be disabled');
+        this.vecExtensionLoaded = false;
+      }
+    }
   }
 
   /**
@@ -137,7 +230,11 @@ export class GraphDatabaseConnection {
     this.db.exec('DELETE FROM edges');
     this.db.exec('DELETE FROM nodes');
     this.db.exec('DELETE FROM chunks');
-    try { this.db.exec('DELETE FROM chunks_fts'); } catch { /* ignore if FTS5 absent */ }
+    try {
+      this.db.exec('DELETE FROM chunks_fts');
+    } catch {
+      /* ignore if FTS5 absent */
+    }
     this.db.exec('DELETE FROM chunks_trigram');
   }
 
@@ -145,9 +242,7 @@ export class GraphDatabaseConnection {
    * Insert a node into the database
    */
   insertNode(node: GraphNode): void {
-    const stmt = this.db.prepare(
-      'INSERT OR IGNORE INTO nodes (id, properties) VALUES (?, ?)'
-    );
+    const stmt = this.db.prepare('INSERT OR IGNORE INTO nodes (id, properties) VALUES (?, ?)');
     stmt.run(node.id, JSON.stringify(node.properties));
   }
 
@@ -167,7 +262,7 @@ export class GraphDatabaseConnection {
   getAllNodes(): GraphNode[] {
     const stmt = this.db.prepare('SELECT id, properties FROM nodes');
     const rows = stmt.all() as Array<{ id: string; properties: string }>;
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       properties: JSON.parse(row.properties),
     }));
@@ -186,13 +281,20 @@ export class GraphDatabaseConnection {
    */
   hasFTS5Support(): boolean {
     try {
-      const result = this.db.prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-      ).get();
+      const result = this.db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
+        .get();
       return !!result;
-    } catch (error) {
+    } catch {
       return false;
     }
+  }
+
+  /**
+   * Check if sqlite-vec extension is loaded
+   */
+  hasVecExtension(): boolean {
+    return this.vecExtensionLoaded;
   }
 
   /**
@@ -231,14 +333,9 @@ export class GraphDatabaseConnection {
           VALUES (?, ?, ?, ?)
         `);
 
-        ftsStmt.run(
-          chunk.chunk_id,
-          chunk.repo,
-          chunk.entity_id || null,
-          chunk.content
-        );
-      } catch (error) {
-        console.warn('Failed to insert into FTS5 table:', error);
+        ftsStmt.run(chunk.chunk_id, chunk.repo, chunk.entity_id || null, chunk.content);
+      } catch {
+        // FTS5 insert failed - continue without sparse indexing
       }
     }
 
@@ -253,22 +350,24 @@ export class GraphDatabaseConnection {
       trigrams.forEach((trigram, position) => {
         trigramStmt.run(chunk.chunk_id, trigram, position);
       });
-    } catch (error) {
-      console.warn('Failed to insert trigrams:', error);
+    } catch {
+      // Trigram insert failed - continue without fuzzy matching
     }
   }
 
   /**
    * Insert multiple chunks in a transaction
    */
-  insertChunks(chunks: Array<{
-    chunk_id: string;
-    repo: string;
-    entity_id?: string;
-    chunk_type: string;
-    content: string;
-    metadata?: Record<string, unknown>;
-  }>): void {
+  insertChunks(
+    chunks: Array<{
+      chunk_id: string;
+      repo: string;
+      entity_id?: string;
+      chunk_type: string;
+      content: string;
+      metadata?: Record<string, unknown>;
+    }>
+  ): void {
     const transaction = this.db.transaction(() => {
       for (const chunk of chunks) {
         this.insertChunk(chunk);

@@ -11,22 +11,67 @@
  * - Optional escalation to Gemini 2.5 Pro for complex queries
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-import { pathToFileURL } from "url";
-import { GraphDatabaseConnection } from "../lib/graph-database.js";
-import { Logger } from "../lib/logger.js";
-import { QueryEngine } from "./tools/query-engine.js";
-import { HybridSearchEngine } from "./tools/hybrid-search.js";
-import type { HybridSearchOptions } from "./tools/hybrid-search.js";
-import { GraniteAttendant, GeminiAttendant } from "./attendant/granite-micro.js";
-import type { LanguageModelV1 } from "ai";
+} from '@modelcontextprotocol/sdk/types.js';
+import { pathToFileURL } from 'url';
+import { GraphDatabaseConnection } from '../lib/graph-database.js';
+import { Logger } from '../lib/logger.js';
+import { QueryEngine } from './tools/query-engine.js';
+import { HybridSearchEngine } from './tools/hybrid-search.js';
+import type { HybridSearchOptions, HybridSearchResult } from './tools/hybrid-search.js';
+import { GraniteAttendant, GeminiAttendant } from './attendant/granite-micro.js';
+import type { LanguageModelV1 } from 'ai';
+import type { CombinedResults, GraphResult } from './tools/query-engine.js';
+
+/**
+ * Attendant mode options
+ */
+type AttendantMode = 'none' | 'granite' | 'gemini';
+
+/**
+ * Query repositories tool arguments
+ */
+interface QueryRepositoriesArgs {
+  query: string;
+  repositories?: string[];
+  attendant?: AttendantMode;
+  maxTokens?: number;
+}
+
+/**
+ * Query dependency tool arguments
+ */
+interface QueryDependencyArgs {
+  dependency: string;
+  repositories?: string[];
+  aspect?: string;
+  attendant?: AttendantMode;
+}
+
+/**
+ * Get cross references tool arguments
+ */
+interface GetCrossReferencesArgs {
+  repositories?: string[];
+  minStrength?: number;
+  attendant?: AttendantMode;
+}
+
+/**
+ * Smart query tool arguments
+ */
+interface SmartQueryArgs {
+  query: string;
+  repositories?: string[];
+  useGraph?: boolean;
+  attendant?: AttendantMode;
+}
 
 /**
  * GraphRAG MCP Server Configuration
@@ -48,11 +93,6 @@ export interface GraphRAGMCPConfig {
   /** Embedding provider for semantic search */
   embeddingProvider?: { embed: (text: string) => Promise<number[]> };
 }
-
-/**
- * Attendant modes for result filtering
- */
-export type AttendantMode = "none" | "granite-micro" | "gemini-2.5-pro";
 
 /**
  * Repository metadata from local database
@@ -91,8 +131,8 @@ export class GraphRAGMCPServer {
 
     // Set default configuration
     this.config = {
-      dbPath: config.dbPath || ".graphrag/database.sqlite",
-      defaultAttendant: config.defaultAttendant || "granite-micro",
+      dbPath: config.dbPath || '.graphrag/database.sqlite',
+      defaultAttendant: config.defaultAttendant || 'granite-micro',
       autoEscalate: config.autoEscalate ?? true,
     };
 
@@ -126,15 +166,13 @@ export class GraphRAGMCPServer {
       this.geminiAttendant = new GeminiAttendant(config.geminiConfig);
     }
 
-    this.logger.info(
-      `GraphRAG MCP Server initializing in local mode (db: ${this.config.dbPath})`
-    );
+    this.logger.info(`GraphRAG MCP Server initializing in local mode (db: ${this.config.dbPath})`);
 
     // Initialize MCP server
     this.server = new Server(
       {
-        name: "graphrag-mcp-server",
-        version: "1.0.0",
+        name: 'graphrag-mcp-server',
+        version: '1.0.0',
       },
       {
         capabilities: {
@@ -156,145 +194,139 @@ export class GraphRAGMCPServer {
       return {
         tools: [
           {
-            name: "query_repositories",
+            name: 'query_repositories',
             description:
-              "Query across multiple indexed repositories with dynamic hybrid search (semantic + keyword + pattern + graph). " +
-              "Automatically weights search strategies using LLM analysis for optimal results. " +
-              "Returns filtered results based on attendant mode (none, granite-micro, or gemini-2.5-pro).",
+              'Query across multiple indexed repositories with dynamic hybrid search (semantic + keyword + pattern + graph). ' +
+              'Automatically weights search strategies using LLM analysis for optimal results. ' +
+              'Returns filtered results based on attendant mode (none, granite-micro, or gemini-2.5-pro).',
             inputSchema: {
-              type: "object",
+              type: 'object',
               properties: {
                 query: {
-                  type: "string",
-                  description:
-                    "Natural language query or specific technical question",
+                  type: 'string',
+                  description: 'Natural language query or specific technical question',
                 },
                 repositories: {
-                  type: "array",
-                  items: { type: "string" },
+                  type: 'array',
+                  items: { type: 'string' },
                   description:
                     "Repository IDs to search (e.g., ['vercel/ai', 'copilotkit/copilotkit']). " +
-                    "If not provided, searches all indexed repositories.",
+                    'If not provided, searches all indexed repositories.',
                 },
                 attendant: {
-                  type: "string",
-                  enum: ["none", "granite-micro", "gemini-2.5-pro"],
+                  type: 'string',
+                  enum: ['none', 'granite-micro', 'gemini-2.5-pro'],
                   description:
                     "Attendant mode for filtering results. 'none' returns raw results, " +
                     "'granite-micro' uses local filtering (default), 'gemini-2.5-pro' uses API for complex reasoning.",
                 },
                 maxTokens: {
-                  type: "number",
+                  type: 'number',
                   description:
-                    "Maximum tokens in response (default: 500). Used by attendant to limit output size.",
+                    'Maximum tokens in response (default: 500). Used by attendant to limit output size.',
                 },
               },
-              required: ["query"],
+              required: ['query'],
             },
           },
           {
-            name: "list_repositories",
+            name: 'list_repositories',
             description:
-              "List all repositories indexed in the local database for this project. " +
-              "Shows repository ID, name, version, and when it was indexed.",
+              'List all repositories indexed in the local database for this project. ' +
+              'Shows repository ID, name, version, and when it was indexed.',
             inputSchema: {
-              type: "object",
+              type: 'object',
               properties: {},
             },
           },
           {
-            name: "query_dependency",
+            name: 'query_dependency',
             description:
-              "Find information about a specific code dependency or entity. " +
-              "Searches the local knowledge graph for entities and their relationships.",
+              'Find information about a specific code dependency or entity. ' +
+              'Searches the local knowledge graph for entities and their relationships.',
             inputSchema: {
-              type: "object",
+              type: 'object',
               properties: {
                 dependency: {
-                  type: "string",
+                  type: 'string',
                   description:
                     "Name of the dependency, entity, or concept to find (e.g., 'StreamingTextResponse', 'useChat')",
                 },
                 repositories: {
-                  type: "array",
-                  items: { type: "string" },
-                  description:
-                    "Optional: limit search to specific repositories",
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Optional: limit search to specific repositories',
                 },
                 aspect: {
-                  type: "string",
-                  enum: ["usage", "relationships", "implementation", "all"],
+                  type: 'string',
+                  enum: ['usage', 'relationships', 'implementation', 'all'],
                   description:
                     "Focus on specific aspect: 'usage' (how it's used), 'relationships' (what it connects to), " +
                     "'implementation' (how it works), or 'all' (everything)",
                 },
                 attendant: {
-                  type: "string",
-                  enum: ["none", "granite-micro", "gemini-2.5-pro"],
-                  description: "Attendant mode for filtering results",
+                  type: 'string',
+                  enum: ['none', 'granite-micro', 'gemini-2.5-pro'],
+                  description: 'Attendant mode for filtering results',
                 },
               },
-              required: ["dependency"],
+              required: ['dependency'],
             },
           },
           {
-            name: "get_cross_references",
+            name: 'get_cross_references',
             description:
-              "Find how different projects reference each other. " +
-              "Discovers cross-repository dependencies and integration points.",
+              'Find how different projects reference each other. ' +
+              'Discovers cross-repository dependencies and integration points.',
             inputSchema: {
-              type: "object",
+              type: 'object',
               properties: {
                 entity: {
-                  type: "string",
-                  description:
-                    "Entity to find references to (e.g., 'StreamingTextResponse')",
+                  type: 'string',
+                  description: "Entity to find references to (e.g., 'StreamingTextResponse')",
                 },
                 sourceRepo: {
-                  type: "string",
-                  description:
-                    "Repository where entity is defined (e.g., 'vercel/ai')",
+                  type: 'string',
+                  description: "Repository where entity is defined (e.g., 'vercel/ai')",
                 },
                 minStrength: {
-                  type: "number",
-                  description:
-                    "Minimum relationship strength (0-1, default: 0.7)",
+                  type: 'number',
+                  description: 'Minimum relationship strength (0-1, default: 0.7)',
                 },
               },
-              required: ["entity"],
+              required: ['entity'],
             },
           },
           {
-            name: "smart_query",
+            name: 'smart_query',
             description:
-              "Ask any natural language question about indexed repositories. " +
-              "Automatically selects the best attendant based on query complexity. " +
+              'Ask any natural language question about indexed repositories. ' +
+              'Automatically selects the best attendant based on query complexity. ' +
               "Use this for general questions when you're not sure which specific tool to use.",
             inputSchema: {
-              type: "object",
+              type: 'object',
               properties: {
                 question: {
-                  type: "string",
-                  description:
-                    "Any natural language question about indexed repositories",
+                  type: 'string',
+                  description: 'Any natural language question about indexed repositories',
                 },
                 context: {
-                  type: "string",
+                  type: 'string',
                   description:
                     "What you're trying to accomplish (helps attendant filter better). " +
                     "Example: 'Building a streaming chat interface with AG-UI'",
                 },
                 forceAttendant: {
-                  type: "string",
-                  enum: ["none", "granite-micro", "gemini-2.5-pro"],
-                  description: "Override auto-selection of attendant",
+                  type: 'string',
+                  enum: ['none', 'granite-micro', 'gemini-2.5-pro'],
+                  description: 'Override auto-selection of attendant',
                 },
                 maxTokens: {
-                  type: "number",
-                  description: "Maximum tokens in response (default: 500)",
+                  type: 'number',
+                  description: 'Maximum tokens in response (default: 500)',
                 },
               },
-              required: ["question"],
+              required: ['question'],
             },
           },
         ],
@@ -307,19 +339,19 @@ export class GraphRAGMCPServer {
 
       try {
         switch (name) {
-          case "list_repositories":
+          case 'list_repositories':
             return await this.handleListRepositories();
 
-          case "query_repositories":
+          case 'query_repositories':
             return await this.handleQueryRepositories(args);
 
-          case "query_dependency":
+          case 'query_dependency':
             return await this.handleQueryDependency(args);
 
-          case "get_cross_references":
+          case 'get_cross_references':
             return await this.handleGetCrossReferences(args);
 
-          case "smart_query":
+          case 'smart_query':
             return await this.handleSmartQuery(args);
 
           default:
@@ -331,7 +363,7 @@ export class GraphRAGMCPServer {
         return {
           content: [
             {
-              type: "text",
+              type: 'text',
               text: `Error executing ${name}: ${errorMessage}`,
             },
           ],
@@ -347,8 +379,8 @@ export class GraphRAGMCPServer {
         resources: repos.map((repo) => ({
           uri: `graphrag://repo/${repo.id}`,
           name: repo.name,
-          description: `Indexed repository: ${repo.id} (v${repo.version || "unknown"})`,
-          mimeType: "application/json",
+          description: `Indexed repository: ${repo.id} (v${repo.version || 'unknown'})`,
+          mimeType: 'application/json',
         })),
       };
     });
@@ -357,11 +389,11 @@ export class GraphRAGMCPServer {
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       const uri = request.params.uri;
 
-      if (!uri.startsWith("graphrag://repo/")) {
+      if (!uri.startsWith('graphrag://repo/')) {
         throw new Error(`Invalid resource URI: ${uri}`);
       }
 
-      const repoId = uri.replace("graphrag://repo/", "");
+      const repoId = uri.replace('graphrag://repo/', '');
       const repo = await this.getRepositoryById(repoId);
 
       if (!repo) {
@@ -372,7 +404,7 @@ export class GraphRAGMCPServer {
         contents: [
           {
             uri,
-            mimeType: "application/json",
+            mimeType: 'application/json',
             text: JSON.stringify(repo, null, 2),
           },
         ],
@@ -387,19 +419,17 @@ export class GraphRAGMCPServer {
     // Check if repositories table exists
     const tableCheck = this.db
       .getSession()
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='repositories'"
-      )
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='repositories'")
       .get();
 
     if (!tableCheck) {
-      this.logger.warn("Repositories table not found - database may not be initialized");
+      this.logger.warn('Repositories table not found - database may not be initialized');
       return [];
     }
 
     const repos = this.db
       .getSession()
-      .prepare("SELECT * FROM repositories")
+      .prepare('SELECT * FROM repositories')
       .all() as RepositoryMetadata[];
 
     return repos;
@@ -411,19 +441,16 @@ export class GraphRAGMCPServer {
   private async getRepositoryById(id: string): Promise<RepositoryMetadata | null> {
     const tableCheck = this.db
       .getSession()
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='repositories'"
-      )
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='repositories'")
       .get();
 
     if (!tableCheck) {
       return null;
     }
 
-    const repo = this.db
-      .getSession()
-      .prepare("SELECT * FROM repositories WHERE id = ?")
-      .get(id) as RepositoryMetadata | undefined;
+    const repo = this.db.getSession().prepare('SELECT * FROM repositories WHERE id = ?').get(id) as
+      | RepositoryMetadata
+      | undefined;
 
     return repo || null;
   }
@@ -431,15 +458,17 @@ export class GraphRAGMCPServer {
   /**
    * Handle list_repositories tool
    */
-  private async handleListRepositories() {
+  private async handleListRepositories(): Promise<{
+    content: Array<{ type: string; text: string }>;
+  }> {
     const repos = await this.getLocalRepositories();
 
     if (repos.length === 0) {
       return {
         content: [
           {
-            type: "text",
-            text: "No repositories indexed yet. Use your CLI tool to index repositories first.",
+            type: 'text',
+            text: 'No repositories indexed yet. Use your CLI tool to index repositories first.',
           },
         ],
       };
@@ -449,16 +478,16 @@ export class GraphRAGMCPServer {
       .map(
         (repo) =>
           `- **${repo.name}** (${repo.id})\n` +
-          `  Version: ${repo.version || "unknown"}\n` +
+          `  Version: ${repo.version || 'unknown'}\n` +
           `  Indexed: ${repo.indexed_at}\n` +
-          `  Branch: ${repo.branch || "unknown"}`
+          `  Branch: ${repo.branch || 'unknown'}`
       )
-      .join("\n\n");
+      .join('\n\n');
 
     return {
       content: [
         {
-          type: "text",
+          type: 'text',
           text: `# Indexed Repositories (${repos.length})\n\n${repoList}`,
         },
       ],
@@ -468,20 +497,22 @@ export class GraphRAGMCPServer {
   /**
    * Handle query_repositories tool
    */
-  private async handleQueryRepositories(args: any) {
+  private async handleQueryRepositories(
+    args: QueryRepositoriesArgs
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
     this.logger.info(`Query repositories: ${args.query}`);
 
-    const query = args.query as string;
-    const repositories = args.repositories as string[] | undefined;
-    const attendantMode = (args.attendant || this.config.defaultAttendant) as AttendantMode;
-    const maxTokens = (args.maxTokens || 500) as number;
+    const query = args.query;
+    const repositories = args.repositories;
+    const attendantMode = args.attendant || this.config.defaultAttendant || 'none';
+    const maxTokens = args.maxTokens || 500;
 
     try {
       // Use hybrid search engine for intelligent multi-strategy search
       const hybridOptions: HybridSearchOptions = {
         ...(repositories && { repositories }),
         maxResults: 20,
-        explain: attendantMode === "none", // Include explanations in raw mode
+        explain: attendantMode === 'none', // Include explanations in raw mode
       };
 
       const hybridResult = await this.hybridSearch.search(query, hybridOptions);
@@ -489,55 +520,71 @@ export class GraphRAGMCPServer {
       // Log search metrics and analysis
       this.logger.info(
         `Hybrid search completed: ${hybridResult.results.length} results, ` +
-        `type=${hybridResult.analysis.query_type}, ` +
-        `time=${hybridResult.metrics.totalTime}ms`
+          `type=${hybridResult.analysis.query_type}, ` +
+          `time=${hybridResult.metrics.totalTime}ms`
       );
 
       // Find cross-references from hybrid results
       const crossRefs = await this.queryEngine.findCrossReferencesFromResults(
-        hybridResult.results.filter(r => r.sources.dense !== undefined).map(r => ({
-          chunk_id: r.id,
-          repo: r.repo,
-          content: r.content,
-          distance: 0,
-          metadata: r.metadata || {},
-        })),
+        hybridResult.results
+          .filter((r) => r.sources.dense !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            distance: 0,
+            metadata: r.metadata || {},
+          })),
         []
       );
 
       // Format combined results for attendant
       const combined = {
-        semantic: hybridResult.results.filter(r => r.sources.dense !== undefined).map(r => ({
-          chunk_id: r.id,
-          repo: r.repo,
-          content: r.content,
-          distance: 0,
-          metadata: r.metadata || {},
-        })),
-        sparse: hybridResult.results.filter(r => r.sources.sparse !== undefined).map(r => ({
-          chunk_id: r.id,
-          repo: r.repo,
-          content: r.content,
-          score: r.score,
-          metadata: r.metadata || {},
-        })),
-        pattern: hybridResult.results.filter(r => r.sources.pattern !== undefined).map(r => ({
-          chunk_id: r.id,
-          repo: r.repo,
-          content: r.content,
-          match_type: 'fuzzy' as const,
-          score: r.score,
-          metadata: r.metadata || {},
-        })),
-        graph: hybridResult.results.filter(r => r.sources.graph !== undefined).map(r => ({
-          id: r.id,
-          repo: r.repo,
-          type: 'entity',
-          properties: r.metadata || {},
-        })),
+        semantic: hybridResult.results
+          .filter((r) => r.sources.dense !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            distance: 0,
+            metadata: r.metadata || {},
+          })),
+        sparse: hybridResult.results
+          .filter((r) => r.sources.sparse !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            score: r.score,
+            metadata: r.metadata || {},
+          })),
+        pattern: hybridResult.results
+          .filter((r) => r.sources.pattern !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            match_type: 'fuzzy' as const,
+            score: r.score,
+            metadata: r.metadata || {},
+          })),
+        graph: hybridResult.results
+          .filter((r) => r.sources.graph !== undefined)
+          .map((r) => ({
+            id: r.id,
+            repo: r.repo,
+            type: 'entity',
+            properties: r.metadata || {},
+          })),
         crossRefs: crossRefs,
         totalTokens: this.queryEngine.estimateTokens({
-          semantic: hybridResult.results.map(r => ({ chunk_id: r.id, repo: r.repo, content: r.content, distance: 0, metadata: {} })),
+          semantic: hybridResult.results.map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            distance: 0,
+            metadata: {},
+          })),
           sparse: [],
           pattern: [],
           graph: [],
@@ -547,12 +594,12 @@ export class GraphRAGMCPServer {
       };
 
       // Filter through attendant (if not "none")
-      if (attendantMode === "none") {
+      if (attendantMode === 'none') {
         // Return raw results with hybrid search metrics
         return {
           content: [
             {
-              type: "text",
+              type: 'text',
               text: this.formatHybridResults(query, hybridResult, combined),
             },
           ],
@@ -561,7 +608,7 @@ export class GraphRAGMCPServer {
 
       // Select attendant
       const attendant =
-        attendantMode === "gemini-2.5-pro" && this.geminiAttendant
+        attendantMode === 'gemini-2.5-pro' && this.geminiAttendant
           ? this.geminiAttendant
           : this.graniteAttendant;
 
@@ -575,10 +622,10 @@ export class GraphRAGMCPServer {
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text:
               filtered.answer +
-              `\n\n---\n*Repositories: ${filtered.repositories.join(", ")}*\n` +
+              `\n\n---\n*Repositories: ${filtered.repositories.join(', ')}*\n` +
               `*Query Type: ${hybridResult.analysis.query_type} (confidence: ${(hybridResult.analysis.confidence || 0).toFixed(2)})*\n` +
               `*Search Coverage: Dense ${(hybridResult.coverage.dense * 100).toFixed(0)}%, ` +
               `Sparse ${(hybridResult.coverage.sparse * 100).toFixed(0)}%, ` +
@@ -592,11 +639,11 @@ export class GraphRAGMCPServer {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error in handleQueryRepositories:", errorMessage);
+      this.logger.error('Error in handleQueryRepositories:', errorMessage);
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Error querying repositories: ${errorMessage}`,
           },
         ],
@@ -607,13 +654,15 @@ export class GraphRAGMCPServer {
   /**
    * Handle query_dependency tool
    */
-  private async handleQueryDependency(args: any) {
+  private async handleQueryDependency(
+    args: QueryDependencyArgs
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
     this.logger.info(`Query dependency: ${args.dependency}`);
 
-    const dependency = args.dependency as string;
-    const repositories = args.repositories as string[] | undefined;
-    const aspect = (args.aspect || "all") as string;
-    const attendantMode = (args.attendant || this.config.defaultAttendant) as AttendantMode;
+    const dependency = args.dependency;
+    const repositories = args.repositories;
+    const aspect = args.aspect || 'all';
+    const attendantMode = args.attendant || this.config.defaultAttendant || 'none';
 
     try {
       // Search for the entity
@@ -622,8 +671,8 @@ export class GraphRAGMCPServer {
       });
 
       // Get relationships if aspect includes them
-      let relationships: any[] = [];
-      if (aspect === "relationships" || aspect === "all") {
+      let relationships: GraphResult[] = [];
+      if (aspect === 'relationships' || aspect === 'all') {
         for (const entity of entityResults.slice(0, 3)) {
           const rels = await this.queryEngine.getEntityRelationships(entity.id, {
             repositories,
@@ -647,7 +696,7 @@ export class GraphRAGMCPServer {
         return {
           content: [
             {
-              type: "text",
+              type: 'text',
               text: `No results found for dependency: "${dependency}"\n\nTry:\n- Checking the spelling\n- Using a partial name\n- Listing repositories to see what's indexed`,
             },
           ],
@@ -655,11 +704,11 @@ export class GraphRAGMCPServer {
       }
 
       // Filter through attendant if not "none"
-      if (attendantMode === "none") {
+      if (attendantMode === 'none') {
         return {
           content: [
             {
-              type: "text",
+              type: 'text',
               text: this.formatRawResults(`Dependency: ${dependency}`, combined),
             },
           ],
@@ -667,7 +716,7 @@ export class GraphRAGMCPServer {
       }
 
       const attendant =
-        attendantMode === "gemini-2.5-pro" && this.geminiAttendant
+        attendantMode === 'gemini-2.5-pro' && this.geminiAttendant
           ? this.geminiAttendant
           : this.graniteAttendant;
 
@@ -680,7 +729,7 @@ export class GraphRAGMCPServer {
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text:
               filtered.answer +
               `\n\n---\n*Found ${entityResults.length} entities, ${relationships.length} relationships*\n` +
@@ -690,11 +739,11 @@ export class GraphRAGMCPServer {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error in handleQueryDependency:", errorMessage);
+      this.logger.error('Error in handleQueryDependency:', errorMessage);
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Error querying dependency: ${errorMessage}`,
           },
         ],
@@ -705,7 +754,9 @@ export class GraphRAGMCPServer {
   /**
    * Handle get_cross_references tool
    */
-  private async handleGetCrossReferences(args: any) {
+  private async handleGetCrossReferences(
+    args: GetCrossReferencesArgs
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
     this.logger.info(`Get cross-references for: ${args.entity}`);
 
     const entity = args.entity as string;
@@ -734,16 +785,15 @@ export class GraphRAGMCPServer {
         (ref) =>
           ref.from_entity.includes(entity) ||
           ref.to_entity.includes(entity) ||
-          (entityRepo &&
-            (ref.from_repo === entityRepo || ref.to_repo === entityRepo))
+          (entityRepo && (ref.from_repo === entityRepo || ref.to_repo === entityRepo))
       );
 
       if (relevantRefs.length === 0) {
         return {
           content: [
             {
-              type: "text",
-              text: `No cross-references found for "${entity}"${entityRepo ? ` in ${entityRepo}` : ""}\n\nThis could mean:\n- The entity is not referenced across repositories\n- The entity name doesn't match exactly\n- Cross-references haven't been indexed yet`,
+              type: 'text',
+              text: `No cross-references found for "${entity}"${entityRepo ? ` in ${entityRepo}` : ''}\n\nThis could mean:\n- The entity is not referenced across repositories\n- The entity name doesn't match exactly\n- Cross-references haven't been indexed yet`,
             },
           ],
         };
@@ -753,14 +803,14 @@ export class GraphRAGMCPServer {
         .map(
           (ref) =>
             `- **${ref.from_repo}/${ref.from_entity}** → **${ref.to_repo}/${ref.to_entity}**\n` +
-            `  Type: ${ref.type}, Strength: ${typeof ref.strength === "number" ? ref.strength.toFixed(2) : "N/A"}`
+            `  Type: ${ref.type}, Strength: ${typeof ref.strength === 'number' ? ref.strength.toFixed(2) : 'N/A'}`
         )
-        .join("\n\n");
+        .join('\n\n');
 
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text:
               `# Cross-References for "${entity}"\n\n` +
               `Found ${relevantRefs.length} cross-repository reference(s):\n\n${formatted}`,
@@ -769,11 +819,11 @@ export class GraphRAGMCPServer {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error in handleGetCrossReferences:", errorMessage);
+      this.logger.error('Error in handleGetCrossReferences:', errorMessage);
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Error getting cross-references: ${errorMessage}`,
           },
         ],
@@ -784,7 +834,9 @@ export class GraphRAGMCPServer {
   /**
    * Handle smart_query tool with auto-escalation
    */
-  private async handleSmartQuery(args: any) {
+  private async handleSmartQuery(
+    args: SmartQueryArgs
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
     this.logger.info(`Smart query: ${args.question}`);
 
     const question = args.question as string;
@@ -807,54 +859,70 @@ export class GraphRAGMCPServer {
 
       this.logger.info(
         `Smart query hybrid search: ${hybridResult.results.length} results, ` +
-        `type=${hybridResult.analysis.query_type}, ` +
-        `time=${hybridResult.metrics.totalTime}ms`
+          `type=${hybridResult.analysis.query_type}, ` +
+          `time=${hybridResult.metrics.totalTime}ms`
       );
 
       // Find cross-references
       const crossRefs = await this.queryEngine.findCrossReferencesFromResults(
-        hybridResult.results.filter(r => r.sources.dense !== undefined).map(r => ({
-          chunk_id: r.id,
-          repo: r.repo,
-          content: r.content,
-          distance: 0,
-          metadata: r.metadata || {},
-        })),
+        hybridResult.results
+          .filter((r) => r.sources.dense !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            distance: 0,
+            metadata: r.metadata || {},
+          })),
         []
       );
 
       const combined = {
-        semantic: hybridResult.results.filter(r => r.sources.dense !== undefined).map(r => ({
-          chunk_id: r.id,
-          repo: r.repo,
-          content: r.content,
-          distance: 0,
-          metadata: r.metadata || {},
-        })),
-        sparse: hybridResult.results.filter(r => r.sources.sparse !== undefined).map(r => ({
-          chunk_id: r.id,
-          repo: r.repo,
-          content: r.content,
-          score: r.score,
-          metadata: r.metadata || {},
-        })),
-        pattern: hybridResult.results.filter(r => r.sources.pattern !== undefined).map(r => ({
-          chunk_id: r.id,
-          repo: r.repo,
-          content: r.content,
-          match_type: 'fuzzy' as const,
-          score: r.score,
-          metadata: r.metadata || {},
-        })),
-        graph: hybridResult.results.filter(r => r.sources.graph !== undefined).map(r => ({
-          id: r.id,
-          repo: r.repo,
-          type: 'entity',
-          properties: r.metadata || {},
-        })),
+        semantic: hybridResult.results
+          .filter((r) => r.sources.dense !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            distance: 0,
+            metadata: r.metadata || {},
+          })),
+        sparse: hybridResult.results
+          .filter((r) => r.sources.sparse !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            score: r.score,
+            metadata: r.metadata || {},
+          })),
+        pattern: hybridResult.results
+          .filter((r) => r.sources.pattern !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            match_type: 'fuzzy' as const,
+            score: r.score,
+            metadata: r.metadata || {},
+          })),
+        graph: hybridResult.results
+          .filter((r) => r.sources.graph !== undefined)
+          .map((r) => ({
+            id: r.id,
+            repo: r.repo,
+            type: 'entity',
+            properties: r.metadata || {},
+          })),
         crossRefs: crossRefs,
         totalTokens: this.queryEngine.estimateTokens({
-          semantic: hybridResult.results.map(r => ({ chunk_id: r.id, repo: r.repo, content: r.content, distance: 0, metadata: {} })),
+          semantic: hybridResult.results.map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            distance: 0,
+            metadata: {},
+          })),
           sparse: [],
           pattern: [],
           graph: [],
@@ -874,9 +942,9 @@ export class GraphRAGMCPServer {
 
       // Apply attendant filtering
       const attendant =
-        attendantMode === "gemini-2.5-pro" && this.geminiAttendant
+        attendantMode === 'gemini-2.5-pro' && this.geminiAttendant
           ? this.geminiAttendant
-          : attendantMode === "none"
+          : attendantMode === 'none'
             ? null
             : this.graniteAttendant;
 
@@ -884,7 +952,7 @@ export class GraphRAGMCPServer {
         return {
           content: [
             {
-              type: "text",
+              type: 'text',
               text: this.formatHybridResults(question, hybridResult, combined),
             },
           ],
@@ -901,24 +969,24 @@ export class GraphRAGMCPServer {
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text:
               filtered.answer +
-              `\n\n---\n*Repositories: ${filtered.repositories.join(", ")}*\n` +
+              `\n\n---\n*Repositories: ${filtered.repositories.join(', ')}*\n` +
               `*Query Type: ${hybridResult.analysis.query_type} (confidence: ${(hybridResult.analysis.confidence || 0).toFixed(2)})*\n` +
               `*Search Time: ${hybridResult.metrics.totalTime}ms*\n` +
               `*Efficiency: ${filtered.efficiency.originalTokens} → ${filtered.efficiency.filteredTokens} tokens (${isNaN(filtered.efficiency.reductionPercent) || !isFinite(filtered.efficiency.reductionPercent) ? 'N/A' : filtered.efficiency.reductionPercent + '%'} reduction)*\n` +
-              `*Attendant: ${attendantMode}${args.forceAttendant ? " (forced)" : " (auto-selected)"}*`,
+              `*Attendant: ${attendantMode}${args.forceAttendant ? ' (forced)' : ' (auto-selected)'}*`,
           },
         ],
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error in handleSmartQuery:", errorMessage);
+      this.logger.error('Error in handleSmartQuery:', errorMessage);
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Error processing smart query: ${errorMessage}`,
           },
         ],
@@ -942,41 +1010,45 @@ export class GraphRAGMCPServer {
     if (this.geminiAttendant) {
       // Many repositories = complex
       if (repositories.length > 3) {
-        this.logger.info("Auto-escalating to Gemini: many repositories");
-        return "gemini-2.5-pro";
+        this.logger.info('Auto-escalating to Gemini: many repositories');
+        return 'gemini-2.5-pro';
       }
 
       // Large result set = needs smart filtering
       if (resultSize > 5000) {
-        this.logger.info("Auto-escalating to Gemini: large result set");
-        return "gemini-2.5-pro";
+        this.logger.info('Auto-escalating to Gemini: large result set');
+        return 'gemini-2.5-pro';
       }
 
       // Complex keywords = needs reasoning
       const complexKeywords = [
-        "architecture",
-        "refactor",
-        "design",
-        "integrate",
-        "how do i",
-        "best way",
-        "should i",
+        'architecture',
+        'refactor',
+        'design',
+        'integrate',
+        'how do i',
+        'best way',
+        'should i',
       ];
       const lowerQuery = query.toLowerCase();
       if (complexKeywords.some((kw) => lowerQuery.includes(kw))) {
-        this.logger.info("Auto-escalating to Gemini: complex query");
-        return "gemini-2.5-pro";
+        this.logger.info('Auto-escalating to Gemini: complex query');
+        return 'gemini-2.5-pro';
       }
     }
 
     // Default to granite-micro for simple queries
-    return "granite-micro";
+    return 'granite-micro';
   }
 
   /**
    * Format hybrid search results with detailed metrics
    */
-  private formatHybridResults(query: string, hybridResult: any, combined: any): string {
+  private formatHybridResults(
+    query: string,
+    hybridResult: HybridSearchResult,
+    combined: CombinedResults
+  ): string {
     let output = `# Query: ${query}\n\n`;
 
     // Add query analysis
@@ -984,7 +1056,8 @@ export class GraphRAGMCPServer {
     output += `- Type: **${hybridResult.analysis.query_type}**\n`;
     output += `- Confidence: ${(hybridResult.analysis.confidence || 0).toFixed(2)}\n`;
     output += `- Reasoning: ${hybridResult.analysis.reasoning}\n`;
-    output += `- Weights: Dense ${hybridResult.analysis.weights.dense}, ` +
+    output +=
+      `- Weights: Dense ${hybridResult.analysis.weights.dense}, ` +
       `Sparse ${hybridResult.analysis.weights.sparse}, ` +
       `Pattern ${hybridResult.analysis.weights.pattern}, ` +
       `Graph ${hybridResult.analysis.weights.graph}\n\n`;
@@ -1010,7 +1083,9 @@ export class GraphRAGMCPServer {
     hybridResult.results.slice(0, 10).forEach((result, idx) => {
       output += `### Result #${idx + 1} (RRF Score: ${result.score.toFixed(4)})\n`;
       output += `**Repository:** ${result.repo}\n`;
-      output += `**Sources:** ${Object.entries(result.sources).map(([type, rank]) => `${type}=#${rank}`).join(', ')}\n\n`;
+      output += `**Sources:** ${Object.entries(result.sources)
+        .map(([type, rank]) => `${type}=#${rank}`)
+        .join(', ')}\n\n`;
       output += `${result.content.slice(0, 300)}...\n\n`;
 
       // Add ranking explanation if available
@@ -1031,9 +1106,9 @@ export class GraphRAGMCPServer {
   }
 
   /**
-   * Format raw results without attendant filtering
+   * Format raw query results without attendant filtering
    */
-  private formatRawResults(query: string, results: any): string {
+  private formatRawResults(query: string, results: CombinedResults): string {
     let output = `# Query: ${query}\n\n`;
 
     if (results.semantic && results.semantic.length > 0) {
@@ -1081,7 +1156,7 @@ export class GraphRAGMCPServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
 
-    this.logger.info("GraphRAG MCP Server running (local mode)");
+    this.logger.info('GraphRAG MCP Server running (local mode)');
     this.logger.info(`Database: ${this.config.dbPath}`);
     this.logger.info(`Default attendant: ${this.config.defaultAttendant}`);
   }
@@ -1092,7 +1167,7 @@ export class GraphRAGMCPServer {
   async close(): Promise<void> {
     this.db.close();
     await this.server.close();
-    this.logger.info("GraphRAG MCP Server stopped");
+    this.logger.info('GraphRAG MCP Server stopped');
   }
 }
 
@@ -1101,35 +1176,32 @@ export class GraphRAGMCPServer {
  */
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const config: GraphRAGMCPConfig = {
-    dbPath: process.env.GRAPHRAG_DB_PATH || ".graphrag/database.sqlite",
-    defaultAttendant:
-      (process.env.GRAPHRAG_DEFAULT_ATTENDANT as AttendantMode) || "granite-micro",
-    autoEscalate: process.env.GRAPHRAG_AUTO_ESCALATE !== "false",
+    dbPath: process.env.GRAPHRAG_DB_PATH || '.graphrag/database.sqlite',
+    defaultAttendant: (process.env.GRAPHRAG_DEFAULT_ATTENDANT as AttendantMode) || 'granite-micro',
+    autoEscalate: process.env.GRAPHRAG_AUTO_ESCALATE !== 'false',
   };
 
   // Only add geminiConfig if API key is provided
   if (process.env.GEMINI_API_KEY) {
     config.geminiConfig = {
       apiKey: process.env.GEMINI_API_KEY,
-      model: process.env.GEMINI_MODEL || "gemini-2.5-pro",
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-pro',
     };
   }
 
   const server = new GraphRAGMCPServer(config);
 
-  server.start().catch((error) => {
-    console.error("Failed to start MCP server:", error);
+  server.start().catch((_error) => {
+    // Fatal server start error - use process.exit which is expected in this context
     process.exit(1);
   });
 
   // Handle graceful shutdown
-  process.on("SIGINT", async () => {
-    await server.close();
-    process.exit(0);
+  process.on('SIGINT', () => {
+    void server.close().then(() => process.exit(0));
   });
 
-  process.on("SIGTERM", async () => {
-    await server.close();
-    process.exit(0);
+  process.on('SIGTERM', () => {
+    void server.close().then(() => process.exit(0));
   });
 }

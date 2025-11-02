@@ -52,7 +52,9 @@ export function loadProviderConfigFromEnv(): ProviderConfig {
     case 'llamacpp': {
       const modelPath = process.env.LLAMACPP_MODEL_PATH;
       if (!modelPath) {
-        throw new Error('LLAMACPP_MODEL_PATH environment variable is required for llama.cpp provider');
+        throw new Error(
+          'LLAMACPP_MODEL_PATH environment variable is required for llama.cpp provider'
+        );
       }
       const config: LlamaCppProviderConfig = {
         type: 'llamacpp',

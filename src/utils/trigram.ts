@@ -29,7 +29,8 @@ export function generateTrigrams(text: string): string[] {
 export function levenshteinDistance(str1: string, str2: string): number {
   const a = Array.from(str1);
   const b = Array.from(str2);
-  const n = a.length, m = b.length;
+  const n = a.length,
+    m = b.length;
   if (!n) return m;
   if (!m) return n;
 
@@ -63,7 +64,7 @@ export function similarityScore(str1: string, str2: string): number {
     return 1.0;
   }
 
-  return 1.0 - (distance / maxLength);
+  return 1.0 - distance / maxLength;
 }
 
 /**
@@ -72,11 +73,7 @@ export function similarityScore(str1: string, str2: string): number {
  * @param pattern - Pattern to search for
  * @param threshold - Similarity threshold (0.0-1.0), default 0.7
  */
-export function fuzzyMatch(
-  text: string,
-  pattern: string,
-  threshold: number = 0.7
-): boolean {
+export function fuzzyMatch(text: string, pattern: string, threshold: number = 0.7): boolean {
   // Exact match
   if (text.toLowerCase().includes(pattern.toLowerCase())) {
     return true;
@@ -87,9 +84,7 @@ export function fuzzyMatch(
   const patternTrigrams = new Set(generateTrigrams(pattern.toLowerCase()));
 
   // Calculate Jaccard similarity
-  const intersection = new Set(
-    [...patternTrigrams].filter(t => textTrigrams.has(t))
-  );
+  const intersection = new Set([...patternTrigrams].filter((t) => textTrigrams.has(t)));
   const union = new Set([...textTrigrams, ...patternTrigrams]);
 
   const jaccardSimilarity = intersection.size / union.size;
@@ -108,11 +103,11 @@ export function findFuzzyMatches(
   maxResults: number = 10
 ): Array<{ text: string; score: number }> {
   const matches = candidates
-    .map(candidate => ({
+    .map((candidate) => ({
       text: candidate,
-      score: similarityScore(candidate, pattern)
+      score: similarityScore(candidate, pattern),
     }))
-    .filter(match => match.score >= threshold)
+    .filter((match) => match.score >= threshold)
     .sort((a, b) => b.score - a.score)
     .slice(0, maxResults);
 
@@ -129,27 +124,27 @@ export function extractIdentifiers(text: string): string[] {
   // Match CamelCase with acronyms and digits (e.g., HTTPServer2, StreamingTextResponse)
   const camelCaseRegex = /[A-Z][A-Za-z0-9]*([A-Z][a-z0-9]+)*/g;
   const camelMatches = text.match(camelCaseRegex) || [];
-  camelMatches.forEach(id => identifiers.add(id));
+  camelMatches.forEach((id) => identifiers.add(id));
 
   // Match snake_case allowing digits (e.g., streaming_text_response, snake2_case)
   const snakeCaseRegex = /[a-z0-9]+(?:[_][a-z0-9]+)+/g;
   const snakeMatches = text.match(snakeCaseRegex) || [];
-  snakeMatches.forEach(id => identifiers.add(id));
+  snakeMatches.forEach((id) => identifiers.add(id));
 
   // Match kebab-case allowing digits (e.g., streaming-text-response, kebab2-case)
   const kebabCaseRegex = /[a-z0-9]+(?:[-][a-z0-9]+)+/g;
   const kebabMatches = text.match(kebabCaseRegex) || [];
-  kebabMatches.forEach(id => identifiers.add(id));
+  kebabMatches.forEach((id) => identifiers.add(id));
 
   // Match UPPER_CASE constants with digits (e.g., MAX_TOKENS, API_KEY_2)
   const upperCaseRegex = /[A-Z0-9]+(?:[_][A-Z0-9]+)+/g;
   const upperMatches = text.match(upperCaseRegex) || [];
-  upperMatches.forEach(id => identifiers.add(id));
+  upperMatches.forEach((id) => identifiers.add(id));
 
   // Match dotted identifiers (e.g., @ai-sdk/openai)
   const dottedRegex = /[@a-z0-9]+(?:[/.][a-z0-9-]+)+/gi;
   const dottedMatches = text.match(dottedRegex) || [];
-  dottedMatches.forEach(id => identifiers.add(id));
+  dottedMatches.forEach((id) => identifiers.add(id));
 
   return Array.from(identifiers);
 }

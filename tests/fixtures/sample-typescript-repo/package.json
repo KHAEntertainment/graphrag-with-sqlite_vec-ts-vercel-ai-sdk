@@ -1,0 +1,14 @@
+{
+  "name": "sample-typescript-app",
+  "version": "1.0.0",
+  "description": "Sample TypeScript application for testing",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest"
+  },
+  "keywords": ["typescript", "authentication", "api"],
+  "author": "Test Author",
+  "license": "MIT"
+}

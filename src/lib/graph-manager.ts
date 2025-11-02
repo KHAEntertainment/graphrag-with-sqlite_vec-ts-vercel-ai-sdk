@@ -64,7 +64,7 @@ export class GraphManager {
 
         // Process relationships
         else if (relationshipsSection && line.trim()) {
-          const parts = line.split('->').map(p => p.trim());
+          const parts = line.split('->').map((p) => p.trim());
           if (parts.length === 3) {
             const source = this.normalizeEntityName(parts[0] || '');
             const relationshipPart = parts[1] || '';
@@ -129,7 +129,9 @@ export class GraphManager {
       degree: number;
     }>;
     const endTime = performance.now();
-    this.logger.debug(`Degree centrality query completed in ${(endTime - startTime).toFixed(8)} seconds`);
+    this.logger.debug(
+      `Degree centrality query completed in ${(endTime - startTime).toFixed(8)} seconds`
+    );
 
     // SQLite does not have graph-native support for betweenness and closeness
     const centralityData: CentralityData = {

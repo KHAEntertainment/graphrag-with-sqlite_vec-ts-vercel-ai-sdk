@@ -1,0 +1,208 @@
+2025-10-29T23:06:44.614Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: test-repo
+2025-10-29T23:06:44.620Z - MarkdownIndexerTest - INFO - Markdown size: 157 characters (39 tokens approx)
+2025-10-29T23:06:44.620Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:44.622Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:06:44.622Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:44.628Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:06:44.628Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:44.964Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: empty-repo
+2025-10-29T23:06:44.965Z - MarkdownIndexerTest - INFO - Markdown size: 0 characters (0 tokens approx)
+2025-10-29T23:06:44.965Z - MarkdownIndexerTest - INFO - Extracted 0 entities and 0 relationships
+2025-10-29T23:06:44.965Z - MarkdownIndexerTest - INFO - Created 0 chunks
+2025-10-29T23:06:44.965Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:44.965Z - MarkdownIndexerTest - INFO - Step 3/6: Building knowledge graph...
+2025-10-29T23:06:44.965Z - MarkdownIndexerTest - INFO - Graph built successfully
+2025-10-29T23:06:44.965Z - MarkdownIndexerTest - INFO - Step 4/6: Storing chunks for hybrid search...
+2025-10-29T23:06:44.966Z - MarkdownIndexerTest - INFO - Stored 0 chunks
+2025-10-29T23:06:44.966Z - MarkdownIndexerTest - INFO - Skipping embedding generation (skipEmbeddings=true)
+2025-10-29T23:06:44.965Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:44.966Z - MarkdownIndexerTest - INFO - Summary: 0 chunks, 0 entities, 0 relationships
+2025-10-29T23:06:44.966Z - MarkdownIndexerTest - INFO - Markdown indexing complete in 2ms
+2025-10-29T23:06:45.260Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: single-line-repo
+2025-10-29T23:06:45.260Z - MarkdownIndexerTest - INFO - Markdown size: 13 characters (3 tokens approx)
+2025-10-29T23:06:45.268Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:45.271Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:45.270Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:06:45.273Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:06:45.273Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:45.632Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: large-repo
+2025-10-29T23:06:45.634Z - MarkdownIndexerTest - INFO - Created 32 chunks
+2025-10-29T23:06:45.635Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:06:45.635Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:45.634Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:45.633Z - MarkdownIndexerTest - INFO - Markdown size: 18869 characters (4717 tokens approx)
+2025-10-29T23:06:45.633Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:45.674Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: meta-repo
+2025-10-29T23:06:45.675Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:45.677Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:06:45.678Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:45.675Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:06:45.675Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:45.733Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: check-repo
+2025-10-29T23:06:45.675Z - MarkdownIndexerTest - INFO - Markdown size: 21 characters (5 tokens approx)
+2025-10-29T23:06:45.733Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:45.734Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:06:45.733Z - MarkdownIndexerTest - INFO - Markdown size: 16 characters (4 tokens approx)
+2025-10-29T23:06:45.736Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:45.734Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:45.735Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:06:46.049Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: stats-repo
+2025-10-29T23:06:46.051Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:46.052Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:46.053Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:06:46.052Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:06:46.053Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:46.050Z - MarkdownIndexerTest - INFO - Markdown size: 89 characters (22 tokens approx)
+2025-10-29T23:06:46.269Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:46.269Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: delete-repo
+2025-10-29T23:06:46.272Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:06:46.269Z - MarkdownIndexerTest - INFO - Markdown size: 16 characters (4 tokens approx)
+2025-10-29T23:06:46.272Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:46.277Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:06:46.277Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:46.393Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: small-chunks-repo
+2025-10-29T23:06:46.393Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:46.394Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:06:46.393Z - MarkdownIndexerTest - INFO - Markdown size: 1400 characters (350 tokens approx)
+2025-10-29T23:06:46.393Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:06:46.394Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:46.393Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:46.800Z - MarkdownIndexerTest - INFO - Markdown size: 6 characters (2 tokens approx)
+2025-10-29T23:06:46.800Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: error-repo
+2025-10-29T23:06:46.800Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:46.806Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:06:46.806Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:46.807Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:06:46.807Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:47.007Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: integration-repo
+2025-10-29T23:06:47.008Z - MarkdownIndexerTest - INFO - Markdown size: 183 characters (46 tokens approx)
+2025-10-29T23:06:47.009Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:47.012Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:06:47.013Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:47.012Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:47.205Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: search-repo
+2025-10-29T23:06:47.205Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:47.206Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:06:47.206Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:47.205Z - MarkdownIndexerTest - INFO - Markdown size: 129 characters (32 tokens approx)
+2025-10-29T23:06:47.205Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:47.205Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:06:47.403Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: vercel-ai-sdk
+2025-10-29T23:06:47.403Z - MarkdownIndexerTest - INFO - Markdown size: 765 characters (191 tokens approx)
+2025-10-29T23:06:47.404Z - MarkdownIndexerTest - INFO - Created 2 chunks
+2025-10-29T23:06:47.404Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:47.405Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:47.404Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:06:47.403Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:47.831Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: github-readme
+2025-10-29T23:06:47.835Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:06:47.835Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:06:47.833Z - MarkdownIndexerTest - INFO - Markdown size: 325 characters (81 tokens approx)
+2025-10-29T23:06:47.840Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:06:47.833Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:06:47.840Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:06:47.013Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:52.872Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: test-repo
+2025-10-29T23:15:52.893Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:52.893Z - MarkdownIndexerTest - INFO - Markdown size: 157 characters (39 tokens approx)
+2025-10-29T23:15:52.896Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:15:52.901Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:52.896Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:52.901Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:53.062Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: empty-repo
+2025-10-29T23:15:53.063Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:53.063Z - MarkdownIndexerTest - INFO - Created 0 chunks
+2025-10-29T23:15:53.063Z - MarkdownIndexerTest - INFO - Extracted 0 entities and 0 relationships
+2025-10-29T23:15:53.063Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:53.063Z - MarkdownIndexerTest - INFO - Step 3/6: Building knowledge graph...
+2025-10-29T23:15:53.067Z - MarkdownIndexerTest - INFO - Graph built successfully
+2025-10-29T23:15:53.067Z - MarkdownIndexerTest - INFO - Step 4/6: Storing chunks for hybrid search...
+2025-10-29T23:15:53.067Z - MarkdownIndexerTest - INFO - Stored 0 chunks
+2025-10-29T23:15:53.063Z - MarkdownIndexerTest - INFO - Markdown size: 0 characters (0 tokens approx)
+2025-10-29T23:15:53.068Z - MarkdownIndexerTest - INFO - Summary: 0 chunks, 0 entities, 0 relationships
+2025-10-29T23:15:53.068Z - MarkdownIndexerTest - INFO - Markdown indexing complete in 6ms
+2025-10-29T23:15:53.068Z - MarkdownIndexerTest - INFO - Skipping embedding generation (skipEmbeddings=true)
+2025-10-29T23:15:53.459Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: single-line-repo
+2025-10-29T23:15:53.464Z - MarkdownIndexerTest - INFO - Markdown size: 13 characters (3 tokens approx)
+2025-10-29T23:15:53.464Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:53.471Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:15:53.471Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:53.484Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:53.484Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:54.141Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: large-repo
+2025-10-29T23:15:54.147Z - MarkdownIndexerTest - INFO - Markdown size: 18869 characters (4717 tokens approx)
+2025-10-29T23:15:54.148Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:54.161Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:54.159Z - MarkdownIndexerTest - INFO - Created 32 chunks
+2025-10-29T23:15:54.182Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:54.183Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:54.834Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: meta-repo
+2025-10-29T23:15:54.837Z - MarkdownIndexerTest - INFO - Markdown size: 21 characters (5 tokens approx)
+2025-10-29T23:15:54.841Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:54.853Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:54.850Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:15:54.880Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:54.883Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:55.024Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: check-repo
+2025-10-29T23:15:55.026Z - MarkdownIndexerTest - INFO - Markdown size: 16 characters (4 tokens approx)
+2025-10-29T23:15:55.027Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:55.030Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:55.035Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:55.035Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:55.030Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:15:55.133Z - MarkdownIndexerTest - INFO - Markdown size: 89 characters (22 tokens approx)
+2025-10-29T23:15:55.133Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:55.135Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:55.133Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:15:55.133Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: stats-repo
+2025-10-29T23:15:55.133Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:55.135Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:55.284Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: delete-repo
+2025-10-29T23:15:55.285Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:55.286Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:55.285Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:15:55.286Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:55.285Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:55.285Z - MarkdownIndexerTest - INFO - Markdown size: 16 characters (4 tokens approx)
+2025-10-29T23:15:55.510Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: small-chunks-repo
+2025-10-29T23:15:55.511Z - MarkdownIndexerTest - INFO - Markdown size: 1400 characters (350 tokens approx)
+2025-10-29T23:15:55.511Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:55.517Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:55.517Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:15:55.648Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:55.740Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: error-repo
+2025-10-29T23:15:55.740Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:55.740Z - MarkdownIndexerTest - INFO - Markdown size: 6 characters (2 tokens approx)
+2025-10-29T23:15:55.768Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:15:55.771Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:55.768Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:55.770Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:56.003Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: integration-repo
+2025-10-29T23:15:56.004Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:56.004Z - MarkdownIndexerTest - INFO - Markdown size: 183 characters (46 tokens approx)
+2025-10-29T23:15:56.017Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:15:56.017Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:56.031Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:56.032Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:56.560Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: search-repo
+2025-10-29T23:15:56.603Z - MarkdownIndexerTest - INFO - Markdown size: 129 characters (32 tokens approx)
+2025-10-29T23:15:56.611Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:15:56.611Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:56.607Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:56.622Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:56.623Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:56.802Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: vercel-ai-sdk
+2025-10-29T23:15:56.803Z - MarkdownIndexerTest - INFO - Created 2 chunks
+2025-10-29T23:15:56.803Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:56.806Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:56.805Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:56.802Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:56.802Z - MarkdownIndexerTest - INFO - Markdown size: 765 characters (191 tokens approx)
+2025-10-29T23:15:57.007Z - MarkdownIndexerTest - INFO - Starting markdown indexing for repository: github-readme
+2025-10-29T23:15:57.012Z - MarkdownIndexerTest - INFO - Created 1 chunks
+2025-10-29T23:15:57.007Z - MarkdownIndexerTest - INFO - Markdown size: 325 characters (81 tokens approx)
+2025-10-29T23:15:57.012Z - MarkdownIndexerTest - INFO - Step 2/6: Extracting entities and relationships...
+2025-10-29T23:15:57.013Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}
+2025-10-29T23:15:57.016Z - MarkdownIndexerTest - ERROR - Markdown indexing failed: {}
+2025-10-29T23:15:57.007Z - MarkdownIndexerTest - INFO - Step 1/6: Chunking markdown with structural awareness...
+2025-10-29T23:15:55.635Z - MarkdownIndexerTest - ERROR - Failed to extract elements from chunk 1: {}

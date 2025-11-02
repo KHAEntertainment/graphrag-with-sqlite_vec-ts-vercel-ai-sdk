@@ -5,10 +5,10 @@
  * with sqlite-vec for semantic search and graph querying.
  */
 
-import type { Database } from "better-sqlite3";
-import type { Embedding } from "../../types/embedding.js";
-import { Logger } from "../../lib/logger.js";
-import { generateTrigrams, levenshteinDistance } from "../../utils/trigram.js";
+import type { Database } from 'better-sqlite3';
+import type { Embedding } from '../../types/embedding.js';
+import { Logger } from '../../lib/logger.js';
+import { generateTrigrams, levenshteinDistance } from '../../utils/trigram.js';
 
 /**
  * Query result from semantic search
@@ -18,7 +18,8 @@ export interface SemanticResult {
   repo: string;
   content: string;
   distance: number;
-  metadata?: Record<string, unknown>;
+  similarity?: number | undefined; // For RRF score normalization (1 - distance)
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -28,7 +29,7 @@ export interface SparseResult {
   chunk_id: string;
   repo: string;
   content: string;
-  score: number;  // BM25 score
+  score: number; // BM25 score
   metadata?: Record<string, unknown>;
 }
 
@@ -51,8 +52,8 @@ export interface GraphResult {
   id: string;
   repo: string;
   properties: Record<string, unknown>;
-  relationship?: string;
-  weight?: number;
+  relationship?: string | undefined;
+  weight?: number | undefined;
 }
 
 /**
@@ -65,6 +66,59 @@ export interface CrossReference {
   to_entity: string;
   type: string;
   strength: number;
+}
+
+/**
+ * Database row structure for semantic search results
+ */
+interface SemanticSearchRow {
+  chunk_id: string;
+  repo: string;
+  content: string;
+  distance: number;
+  metadata?: string;
+}
+
+/**
+ * Database row structure for sparse search results
+ */
+interface SparseSearchRow {
+  chunk_id: string;
+  repo: string;
+  content: string;
+  score: number;
+}
+
+/**
+ * Database row structure for pattern search results
+ */
+interface PatternSearchRow {
+  chunk_id: string;
+  repo: string;
+  content: string;
+  metadata?: string;
+}
+
+/**
+ * Database row structure for fuzzy pattern search results
+ */
+interface FuzzyPatternSearchRow {
+  chunk_id: string;
+  repo: string;
+  content: string;
+  trigram_matches: number;
+  metadata?: string;
+}
+
+/**
+ * Database row structure for graph query results
+ */
+interface GraphQueryRow {
+  id: string;
+  repo?: string;
+  properties?: string;
+  relationship?: string;
+  weight?: number;
 }
 
 /**
@@ -104,12 +158,10 @@ export class QueryEngine {
   private hasVecExtension(): boolean {
     try {
       const result = this.db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='embeddings'"
-        )
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='embeddings'")
         .get();
       return !!result;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -120,12 +172,10 @@ export class QueryEngine {
   private hasCrossReferencesTable(): boolean {
     try {
       const result = this.db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='cross_references'"
-        )
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='cross_references'")
         .get();
       return !!result;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -139,17 +189,11 @@ export class QueryEngine {
     options: QueryOptions = {}
   ): Promise<SemanticResult[]> {
     if (!this.hasVecExtension()) {
-      this.logger.warn(
-        "sqlite-vec extension not available, skipping semantic search"
-      );
+      this.logger.warn('sqlite-vec extension not available, skipping semantic search');
       return [];
     }
 
-    const {
-      repositories,
-      maxResults = 20,
-      minSimilarity = 0.7,
-    } = options;
+    const { repositories, maxResults = 20, minSimilarity = 0.7 } = options;
 
     try {
       let sql = `
@@ -163,14 +207,14 @@ export class QueryEngine {
         WHERE vec_distance_cosine(embedding, ?) < ?
       `;
 
-      const params: any[] = [
+      const params: (string | number)[] = [
         JSON.stringify(queryEmbedding),
         JSON.stringify(queryEmbedding), // Repeat for WHERE clause
         1 - minSimilarity, // Convert similarity to distance
       ];
 
       if (repositories && repositories.length > 0) {
-        sql += ` AND repo IN (${repositories.map(() => "?").join(",")})`;
+        sql += ` AND repo IN (${repositories.map(() => '?').join(',')})`;
         params.push(...repositories);
       }
 
@@ -178,18 +222,19 @@ export class QueryEngine {
       params.push(maxResults);
 
       const stmt = this.db.prepare(sql);
-      const results = stmt.all(...params) as any[];
+      const results = stmt.all(...params) as SemanticSearchRow[];
 
       return results.map((row) => ({
         chunk_id: row.chunk_id,
         repo: row.repo,
         content: row.content,
         distance: row.distance,
+        similarity: 1 - row.distance,
         metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error querying embeddings:", errorMessage);
+      this.logger.error('Error querying embeddings:', errorMessage);
       return [];
     }
   }
@@ -200,12 +245,10 @@ export class QueryEngine {
   private hasFTS5Support(): boolean {
     try {
       const result = this.db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-        )
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
         .get();
       return !!result;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -213,21 +256,13 @@ export class QueryEngine {
   /**
    * Query using sparse retrieval (FTS5 with BM25)
    */
-  async querySparse(
-    query: string,
-    options: QueryOptions = {}
-  ): Promise<SparseResult[]> {
+  async querySparse(query: string, options: QueryOptions = {}): Promise<SparseResult[]> {
     if (!this.hasFTS5Support()) {
-      this.logger.warn(
-        "FTS5 not available, skipping sparse search"
-      );
+      this.logger.warn('FTS5 not available, skipping sparse search');
       return [];
     }
 
-    const {
-      repositories,
-      maxResults = 20,
-    } = options;
+    const { repositories, maxResults = 20 } = options;
 
     try {
       let sql = `
@@ -240,10 +275,10 @@ export class QueryEngine {
         WHERE content MATCH ?
       `;
 
-      const params: any[] = [query];
+      const params: (string | number)[] = [query];
 
       if (repositories && repositories.length > 0) {
-        sql += ` AND repo IN (${repositories.map(() => "?").join(",")})`;
+        sql += ` AND repo IN (${repositories.map(() => '?').join(',')})`;
         params.push(...repositories);
       }
 
@@ -251,7 +286,7 @@ export class QueryEngine {
       params.push(maxResults);
 
       const stmt = this.db.prepare(sql);
-      const results = stmt.all(...params) as any[];
+      const results = stmt.all(...params) as SparseSearchRow[];
 
       return results.map((row) => ({
         chunk_id: row.chunk_id,
@@ -261,7 +296,7 @@ export class QueryEngine {
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error in sparse search:", errorMessage);
+      this.logger.error('Error in sparse search:', errorMessage);
       return [];
     }
   }
@@ -269,14 +304,8 @@ export class QueryEngine {
   /**
    * Query using pattern matching (substring/wildcard)
    */
-  async queryPattern(
-    pattern: string,
-    options: QueryOptions = {}
-  ): Promise<PatternResult[]> {
-    const {
-      repositories,
-      maxResults = 20,
-    } = options;
+  async queryPattern(pattern: string, options: QueryOptions = {}): Promise<PatternResult[]> {
+    const { repositories, maxResults = 20 } = options;
 
     try {
       let sql = `
@@ -290,10 +319,10 @@ export class QueryEngine {
       `;
 
       // Wrap pattern in wildcards for substring matching
-      const params: any[] = [`%${pattern}%`];
+      const params: (string | number)[] = [`%${pattern}%`];
 
       if (repositories && repositories.length > 0) {
-        sql += ` AND repo IN (${repositories.map(() => "?").join(",")})`;
+        sql += ` AND repo IN (${repositories.map(() => '?').join(',')})`;
         params.push(...repositories);
       }
 
@@ -301,7 +330,7 @@ export class QueryEngine {
       params.push(maxResults);
 
       const stmt = this.db.prepare(sql);
-      const results = stmt.all(...params) as any[];
+      const results = stmt.all(...params) as PatternSearchRow[];
 
       return results.map((row) => ({
         chunk_id: row.chunk_id,
@@ -313,7 +342,7 @@ export class QueryEngine {
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error in pattern search:", errorMessage);
+      this.logger.error('Error in pattern search:', errorMessage);
       return [];
     }
   }
@@ -325,11 +354,7 @@ export class QueryEngine {
     pattern: string,
     options: QueryOptions & { threshold?: number } = {}
   ): Promise<PatternResult[]> {
-    const {
-      repositories,
-      maxResults = 20,
-      threshold = 0.7,
-    } = options;
+    const { repositories, maxResults = 20, threshold = 0.7 } = options;
 
     try {
       // Generate trigrams from pattern
@@ -345,13 +370,13 @@ export class QueryEngine {
           COUNT(DISTINCT t.trigram) as trigram_matches
         FROM chunks c
         JOIN chunks_trigram t ON c.chunk_id = t.chunk_id
-        WHERE t.trigram IN (${patternTrigrams.map(() => "?").join(",")})
+        WHERE t.trigram IN (${patternTrigrams.map(() => '?').join(',')})
       `;
 
-      const params: any[] = [...patternTrigrams];
+      const params: (string | number)[] = [...patternTrigrams];
 
       if (repositories && repositories.length > 0) {
-        sql += ` AND c.repo IN (${repositories.map(() => "?").join(",")})`;
+        sql += ` AND c.repo IN (${repositories.map(() => '?').join(',')})`;
         params.push(...repositories);
       }
 
@@ -365,7 +390,7 @@ export class QueryEngine {
       params.push(minTrigramMatches, maxResults * 3); // Get more for Levenshtein filtering
 
       const stmt = this.db.prepare(sql);
-      const candidates = stmt.all(...params) as any[];
+      const candidates = stmt.all(...params) as FuzzyPatternSearchRow[];
 
       // Calculate Levenshtein distance for each candidate
       const results = candidates
@@ -387,7 +412,7 @@ export class QueryEngine {
 
           // Calculate similarity score
           const maxLength = pattern.length;
-          const similarity = 1 - (bestDistance / maxLength);
+          const similarity = 1 - bestDistance / maxLength;
 
           return {
             chunk_id: row.chunk_id,
@@ -398,14 +423,14 @@ export class QueryEngine {
             metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
           };
         })
-        .filter(result => result.score >= threshold)
+        .filter((result) => result.score >= threshold)
         .sort((a, b) => b.score - a.score)
         .slice(0, maxResults);
 
       return results;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error in fuzzy search:", errorMessage);
+      this.logger.error('Error in fuzzy search:', errorMessage);
       return [];
     }
   }
@@ -413,10 +438,7 @@ export class QueryEngine {
   /**
    * Query local graph database
    */
-  async queryLocalGraph(
-    entities: string[],
-    options: QueryOptions = {}
-  ): Promise<GraphResult[]> {
+  async queryLocalGraph(entities: string[], options: QueryOptions = {}): Promise<GraphResult[]> {
     if (entities.length === 0) {
       return [];
     }
@@ -436,38 +458,38 @@ export class QueryEngine {
         WHERE 1=1
       `;
 
-      const params: any[] = [];
+      const params: (string | number)[] = [];
 
       // Search for entities by ID or within properties
       const entityConditions = entities.map(() => {
-        return "(n.id LIKE ? OR n.properties LIKE ?)";
+        return '(n.id LIKE ? OR n.properties LIKE ?)';
       });
 
       if (entityConditions.length > 0) {
-        sql += ` AND (${entityConditions.join(" OR ")})`;
+        sql += ` AND (${entityConditions.join(' OR ')})`;
         for (const entity of entities) {
           params.push(`%${entity}%`, `%${entity}%`);
         }
       }
 
       if (repositories && repositories.length > 0) {
-        sql += ` AND json_extract(n.properties, '$.repo') IN (${repositories.map(() => "?").join(",")})`;
+        sql += ` AND json_extract(n.properties, '$.repo') IN (${repositories.map(() => '?').join(',')})`;
         params.push(...repositories);
       }
 
       const stmt = this.db.prepare(sql);
-      const results = stmt.all(...params) as any[];
+      const results = stmt.all(...params) as GraphQueryRow[];
 
-      return results.map((row) => ({
+      return results.map((row): GraphResult => ({
         id: row.id,
-        repo: row.repo ?? "unknown",
-        properties: row.properties ? JSON.parse(row.properties) : {},
-        relationship: row.relationship,
-        weight: row.weight,
+        repo: row.repo ?? 'unknown',
+        properties: (row.properties ? JSON.parse(row.properties) : {}) as Record<string, unknown>,
+        relationship: row.relationship ?? undefined,
+        weight: row.weight ?? undefined,
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error querying graph:", errorMessage);
+      this.logger.error('Error querying graph:', errorMessage);
       return [];
     }
   }
@@ -480,7 +502,7 @@ export class QueryEngine {
     minStrength: number = 0.7
   ): Promise<CrossReference[]> {
     if (!this.hasCrossReferencesTable()) {
-      this.logger.warn("cross_references table not found");
+      this.logger.warn('cross_references table not found');
       return [];
     }
 
@@ -501,12 +523,12 @@ export class QueryEngine {
         WHERE strength >= ?
       `;
 
-      const params: any[] = [minStrength];
+      const params: (string | number)[] = [minStrength];
 
       if (involvedRepos.length > 0) {
         sql += ` AND (
-          from_repo IN (${involvedRepos.map(() => "?").join(",")})
-          OR to_repo IN (${involvedRepos.map(() => "?").join(",")})
+          from_repo IN (${involvedRepos.map(() => '?').join(',')})
+          OR to_repo IN (${involvedRepos.map(() => '?').join(',')})
         )`;
         params.push(...involvedRepos, ...involvedRepos);
       }
@@ -519,7 +541,7 @@ export class QueryEngine {
       return results;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error querying cross-references:", errorMessage);
+      this.logger.error('Error querying cross-references:', errorMessage);
       return [];
     }
   }
@@ -554,10 +576,7 @@ export class QueryEngine {
   /**
    * Search for a specific entity across repositories
    */
-  async searchEntity(
-    entityName: string,
-    options: QueryOptions = {}
-  ): Promise<GraphResult[]> {
+  async searchEntity(entityName: string, options: QueryOptions = {}): Promise<GraphResult[]> {
     const { repositories } = options;
 
     try {
@@ -573,26 +592,26 @@ export class QueryEngine {
         WHERE n.id LIKE ? OR n.properties LIKE ?
       `;
 
-      const params: any[] = [`%${entityName}%`, `%${entityName}%`];
+      const params: (string | number)[] = [`%${entityName}%`, `%${entityName}%`];
 
       if (repositories && repositories.length > 0) {
-        sql += ` AND json_extract(n.properties, '$.repo') IN (${repositories.map(() => "?").join(",")})`;
+        sql += ` AND json_extract(n.properties, '$.repo') IN (${repositories.map(() => '?').join(',')})`;
         params.push(...repositories);
       }
 
       const stmt = this.db.prepare(sql);
-      const results = stmt.all(...params) as any[];
+      const results = stmt.all(...params) as GraphQueryRow[];
 
-      return results.map((row) => ({
+      return results.map((row): GraphResult => ({
         id: row.id,
-        repo: row.repo ?? "unknown",
-        properties: row.properties ? JSON.parse(row.properties) : {},
-        relationship: row.relationship,
-        weight: row.weight,
+        repo: row.repo ?? 'unknown',
+        properties: (row.properties ? JSON.parse(row.properties) : {}) as Record<string, unknown>,
+        relationship: row.relationship ?? undefined,
+        weight: row.weight ?? undefined,
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error searching entity:", errorMessage);
+      this.logger.error('Error searching entity:', errorMessage);
       return [];
     }
   }
@@ -620,26 +639,26 @@ export class QueryEngine {
           AND n.id != ?
       `;
 
-      const params: any[] = [entityId, entityId, entityId];
+      const params: (string | number)[] = [entityId, entityId, entityId];
 
       if (repositories && repositories.length > 0) {
-        sql += ` AND json_extract(n.properties, '$.repo') IN (${repositories.map(() => "?").join(",")})`;
+        sql += ` AND json_extract(n.properties, '$.repo') IN (${repositories.map(() => '?').join(',')})`;
         params.push(...repositories);
       }
 
       const stmt = this.db.prepare(sql);
-      const results = stmt.all(...params) as any[];
+      const results = stmt.all(...params) as GraphQueryRow[];
 
-      return results.map((row) => ({
+      return results.map((row): GraphResult => ({
         id: row.id,
-        repo: row.repo ?? "unknown",
-        properties: row.properties ? JSON.parse(row.properties) : {},
-        relationship: row.relationship,
-        weight: row.weight,
+        repo: row.repo ?? 'unknown',
+        properties: (row.properties ? JSON.parse(row.properties) : {}) as Record<string, unknown>,
+        relationship: row.relationship ?? undefined,
+        weight: row.weight ?? undefined,
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error("Error getting entity relationships:", errorMessage);
+      this.logger.error('Error getting entity relationships:', errorMessage);
       return [];
     }
   }
@@ -691,40 +710,40 @@ export class QueryEngine {
   extractEntities(query: string): string[] {
     // Remove common words and split
     const commonWords = new Set([
-      "the",
-      "a",
-      "an",
-      "and",
-      "or",
-      "but",
-      "in",
-      "on",
-      "at",
-      "to",
-      "for",
-      "of",
-      "with",
-      "by",
-      "from",
-      "how",
-      "what",
-      "where",
-      "when",
-      "why",
-      "who",
-      "use",
-      "using",
-      "used",
-      "get",
-      "set",
-      "do",
-      "does",
-      "is",
-      "are",
-      "was",
-      "were",
-      "be",
-      "been",
+      'the',
+      'a',
+      'an',
+      'and',
+      'or',
+      'but',
+      'in',
+      'on',
+      'at',
+      'to',
+      'for',
+      'of',
+      'with',
+      'by',
+      'from',
+      'how',
+      'what',
+      'where',
+      'when',
+      'why',
+      'who',
+      'use',
+      'using',
+      'used',
+      'get',
+      'set',
+      'do',
+      'does',
+      'is',
+      'are',
+      'was',
+      'were',
+      'be',
+      'been',
     ]);
 
     const words = query
@@ -732,7 +751,7 @@ export class QueryEngine {
       .split(/\s+/)
       .filter((word) => {
         // Remove punctuation
-        const cleaned = word.replace(/[^\w]/g, "");
+        const cleaned = word.replace(/[^\w]/g, '');
         // Keep if not common word and length > 2
         return cleaned.length > 2 && !commonWords.has(cleaned);
       });

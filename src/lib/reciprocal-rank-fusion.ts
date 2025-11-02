@@ -32,10 +32,10 @@ export interface FusedResult {
   score: number;
   /** Which search strategies contributed to this result */
   sources: {
-    dense?: number;    // Rank in dense search (1-based)
-    sparse?: number;   // Rank in sparse search
-    pattern?: number;  // Rank in pattern search
-    graph?: number;    // Rank in graph search
+    dense?: number; // Rank in dense search (1-based)
+    sparse?: number; // Rank in sparse search
+    pattern?: number; // Rank in pattern search
+    graph?: number; // Rank in graph search
   };
   /** Original metadata if available */
   metadata?: Record<string, unknown>;
@@ -65,18 +65,17 @@ export class ReciprocalRankFusion {
   /**
    * Fuse results from all search strategies
    */
-  fuse(
-    results: RRFInput,
-    weights: SearchWeights,
-    maxResults: number = 20
-  ): FusedResult[] {
-    const scores = new Map<string, {
-      score: number;
-      repo: string;
-      content: string;
-      sources: FusedResult['sources'];
-      metadata?: Record<string, unknown>;
-    }>();
+  fuse(results: RRFInput, weights: SearchWeights, maxResults: number = 20): FusedResult[] {
+    const scores = new Map<
+      string,
+      {
+        score: number;
+        repo: string;
+        content: string;
+        sources: FusedResult['sources'];
+        metadata?: Record<string, unknown>;
+      }
+    >();
 
     // Process dense (semantic) results
     results.semantic.forEach((result, index) => {
@@ -223,7 +222,9 @@ export class ReciprocalRankFusion {
       );
     }
 
-    return `Total RRF score: ${totalScore.toFixed(4)}\n` + explanations.map(e => `  - ${e}`).join('\n');
+    return (
+      `Total RRF score: ${totalScore.toFixed(4)}\n` + explanations.map((e) => `  - ${e}`).join('\n')
+    );
   }
 
   /**
@@ -242,13 +243,8 @@ export class ReciprocalRankFusion {
    * Filter results by minimum source diversity
    * (e.g., only show results that appeared in at least 2 search types)
    */
-  filterByDiversity(
-    results: FusedResult[],
-    minDiversity: number
-  ): FusedResult[] {
-    return results.filter(
-      result => this.getSourceDiversity(result) >= minDiversity
-    );
+  filterByDiversity(results: FusedResult[], minDiversity: number): FusedResult[] {
+    return results.filter((result) => this.getSourceDiversity(result) >= minDiversity);
   }
 
   /**
