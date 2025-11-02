@@ -15,8 +15,10 @@
  * - Edges: "S <predicate> O :: context:..." → Granite Embedding → vec0
  * - Enables similarity search for both entities AND relationships
  * - Use SciPhi/Triplex for extracting triples from code/docs
+ * - Query analysis via IBM Granite 4.0 Micro
  *
- * See: docs/SQLITE-VEC-INTEGRATION-PLAN.md#model-recommendations
+ * @see CONSTITUTION.md - Canonical model specifications
+ * @see docs/SQLITE-VEC-INTEGRATION-PLAN.md#model-recommendations
  */
 
 import type { Database } from 'better-sqlite3';

@@ -16,7 +16,7 @@ For optimal GraphRAG performance, use these specialized models:
 |---------|-------|------|-------|
 | **Triple Extraction** | [SciPhi/Triplex](https://huggingface.co/SciPhi/Triplex) | 3.8B | Extract KG triples from code/docs |
 | **Embeddings** | IBM Granite Embedding | 125M-278M | Vectorize entities & edges |
-| **Query Analysis** | IBM Granite 3.1 | 2B-8B | Powers dynamic hybrid search |
+| **Query Analysis** | IBM Granite 4.0 Micro | ~3B | Powers dynamic hybrid search + MCP attendant |
 | **Reasoning (Optional)** | [StructLM-7B](https://huggingface.co/TIGER-Lab/StructLM-7B) | 7B (Q4) | Graph inference & link prediction |
 
 **Key Pattern:**

@@ -120,8 +120,8 @@ const logger = new Logger('Index', './logs', 'index.log');
 const embeddingProvider = /* your embedding provider */;
 const embeddingManager = new EmbeddingManager(embeddingProvider, logger);
 
-// Configure LLM for entity extraction (IBM Granite 3.1 2B)
-const model = llamacpp('granite-3.1-2b-q8_0.gguf');
+// Configure LLM for entity extraction (IBM Granite 4.0 Micro ~3B)
+const model = llamacpp('granite-4.0-micro.gguf');
 
 // Create indexer and register repository
 const indexer = new RepositoryIndexer(db, logger, embeddingManager, model);
@@ -210,10 +210,11 @@ Based on extensive research, these models provide optimal performance for GraphR
   - Edge format: `"S <predicate> O :: context:..."`
   - Enables similarity search for entities AND relationships
 
-### Query Analysis (Current)
-- **IBM Granite 3.1** (2B-8B)
+### Query Analysis & MCP Attendant
+- **[IBM Granite 4.0 Micro](https://huggingface.co/ibm-granite/granite-4.0-micro)** (~3B, 128k context)
   - Powers dynamic hybrid search query classification
   - Determines optimal search strategy weights
+  - Also serves as MCP attendant for result filtering
 
 ### Optional: Advanced Reasoning
 - **[TIGER-Lab/StructLM-7B](https://huggingface.co/TIGER-Lab/StructLM-7B)** (Q4 quantized)

@@ -283,14 +283,14 @@ const reasoning = await structLM.reason({
 | Task | Model | Size | Purpose |
 |------|-------|------|---------|
 | **Triple Extraction** | SciPhi/Triplex | 3.8B | Extract [s,p,o] from code/docs |
-| **Embeddings** | IBM Granite | 125M-278M | Vectorize entities and edges |
-| **Query Analysis** | IBM Granite 3.1 2B/8B | 2B-8B | Classify query types for hybrid search |
+| **Embeddings** | IBM Granite Embedding | 125M-278M | Vectorize entities and edges |
+| **Query Analysis** | IBM Granite 4.0 Micro | ~3B | Classify query types for hybrid search |
 | **Reasoning (Optional)** | TIGER-Lab/StructLM-7B | 7B (Q4) | Infer missing links, complex queries |
 
 **Resource Requirements:**
 - **Minimum (CPU):** Triplex (3.8B) + Granite Embedding (125M) = ~4-5GB RAM
-- **Recommended (CPU):** + Granite 3.1 2B for query analysis = ~6-7GB RAM
-- **Full Stack (CPU):** + StructLM-7B Q4 = ~10-12GB RAM
+- **Recommended (CPU):** + Granite 4.0 Micro (~3B) for query analysis = ~7-8GB RAM
+- **Full Stack (CPU):** + StructLM-7B Q4 = ~11-13GB RAM
 - **GPU:** All models run significantly faster with CUDA/Metal acceleration
 
 ## Implementation Plan

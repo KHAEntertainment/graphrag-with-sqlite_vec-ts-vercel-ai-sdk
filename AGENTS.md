@@ -1,8 +1,8 @@
-# CLAUDE.md
+# AGENTS.md
 
 > **📖 Source of Truth:** See [CONSTITUTION.md](./CONSTITUTION.md) for canonical model specifications and architectural invariants.
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to autonomous coding agents (Cursor, Aider, Claude Code, etc.) when working with code in this repository.
 
 ## Project Overview
 
@@ -149,11 +149,11 @@ Key tables:
 **Key Features:**
 - Local-first (100% offline)
 - Multi-repository support
-- Intelligent attendant filtering (Granite Micro + optional Gemini 2.5 Pro)
+- Intelligent attendant filtering (Granite 4.0 Micro + optional Gemini 2.5 Pro)
 - Dynamic hybrid search integration
 
 **Attendant System:**
-- `src/mcp/attendant/granite-micro.ts` - Local filtering with Granite Micro 4.0
+- `src/mcp/attendant/granite-micro.ts` - Local filtering with Granite 4.0 Micro
 - Automatic escalation to Gemini 2.5 Pro for complex queries
 
 ### AI Provider System
@@ -167,31 +167,25 @@ Key tables:
 
 **Configuration:** `src/providers/config.ts` loads from environment variables
 
-## Recommended Models
+## Canonical Model Specifications
 
-> **⚠️ IMPORTANT:** All model specifications are locked in [CONSTITUTION.md](./CONSTITUTION.md). The table below is a quick reference only.
+> **⚠️ IMPORTANT:** All model specifications are locked in [CONSTITUTION.md](./CONSTITUTION.md). Refer to that document for:
+> - Official model stack (Triplex, Granite Embedding, Granite 4.0 Micro, StructLM-7B)
+> - HuggingFace model IDs
+> - Resource requirements
+> - Fallback strategies
 
-### Triple Extraction
-**[SciPhi/Triplex](https://huggingface.co/SciPhi/Triplex)** (Phi-3 3.8B)
-- Purpose: Extract [subject, predicate, object] from code/docs
-- Fine-tuned for knowledge graph construction
+### Quick Reference
 
-### Embeddings
-**IBM Granite Embedding** (125M-278M)
-- Entity format: `"name :: kind :: hints"`
-- Edge format: `"S <predicate> O :: context:..."`
-- Enables similarity search for both entities AND relationships
+| Role | Model | HuggingFace ID |
+|------|-------|----------------|
+| **Triple Extraction** | SciPhi Triplex | `SciPhi/Triplex` |
+| **Embeddings** | IBM Granite Embedding 125M | `ibm-granite/granite-embedding-125m-english` |
+| **Query Analysis** | IBM Granite 4.0 Micro | `ibm-granite/granite-4.0-micro` |
+| **MCP Attendant** | IBM Granite 4.0 Micro | `ibm-granite/granite-4.0-micro` |
+| **Optional Reasoning** | TIGER-Lab StructLM-7B | `TIGER-Lab/StructLM-7B` |
 
-### Query Analysis & MCP Attendant
-**[IBM Granite 4.0 Micro](https://huggingface.co/ibm-granite/granite-4.0-micro)** (~3B, 128k context)
-- Powers dynamic hybrid search classification
-- Determines optimal search strategy weights
-- Also serves as MCP attendant for result filtering
-
-### Optional Reasoning
-**[TIGER-Lab/StructLM-7B](https://huggingface.co/TIGER-Lab/StructLM-7B)** (Q4 quantized)
-- Use AFTER building KG with Triplex
-- Infers missing links and answers complex graph queries
+See [CONSTITUTION.md](./CONSTITUTION.md) for complete details, dimensions, and use cases.
 
 ## Key Technical Details
 
@@ -214,7 +208,7 @@ Key tables:
   - Edges: Embed relationship context
 - **Batch processing:** Chunks processed in batches of 10
 
-## Important Patterns
+## Important Patterns for Agents
 
 ### Error Handling
 The codebase uses try-catch blocks with graceful degradation:
@@ -244,7 +238,17 @@ Always use `.js` extensions in imports (TypeScript compiles `.ts` to `.js`):
 import { GraphDatabaseConnection } from '../lib/graph-database.js';
 ```
 
-## Development Workflow
+### Referencing Constitution in Code Comments
+Always reference CONSTITUTION.md in code comments for model-specific implementations:
+```typescript
+/**
+ * Extract triples using SciPhi/Triplex (3.8B)
+ *
+ * @see CONSTITUTION.md - Model Specifications - Triple Extraction
+ */
+```
+
+## Agent Development Workflow
 
 ### Working with Hybrid Search
 
@@ -259,13 +263,23 @@ import { GraphDatabaseConnection } from '../lib/graph-database.js';
 2. Update `QueryAnalysis` type in `src/types/query-analysis.ts`
 3. Modify `HybridSearchEngine.search()` to include new strategy
 4. Update RRF fusion to handle new result type
+5. **IMPORTANT:** Verify alignment with CONSTITUTION.md invariants (4-way hybrid search)
 
 ### Extending MCP Server Tools
 
 1. Add tool definition to `server.ts` in `list_tools` handler
 2. Implement tool logic in `call_tool` handler
 3. Update `GraphRAGMCPConfig` interface if configuration needed
-4. Test with Claude Desktop
+4. Test with Claude Desktop or other MCP-compatible clients
+
+### Making Model Changes
+
+**⚠️ CRITICAL:** Model changes require Constitution update first. See [CONSTITUTION.md - Deviation Protocol](./CONSTITUTION.md#deviation-protocol).
+
+1. **Never** hardcode model names - use generic interfaces
+2. **Always** document model choice in code comments with Constitution reference
+3. **If fallback needed** - Log the fallback event and reason
+4. **If proposing new model** - Update CONSTITUTION.md first
 
 ## Environment Variables
 
@@ -320,7 +334,7 @@ GEMINI_MODEL=gemini-2.5-pro
 - `server.ts` - Main MCP server
 - `tools/hybrid-search.ts` - Unified hybrid search
 - `tools/query-engine.ts` - Individual search strategies
-- `attendant/granite-micro.ts` - Granite Micro and Gemini attendants
+- `attendant/granite-micro.ts` - Granite 4.0 Micro and Gemini attendants
 
 ### Type Definitions (`src/types/`)
 - `index.ts` - Core types (GraphNode, GraphEdge, etc.)
@@ -343,13 +357,13 @@ GEMINI_MODEL=gemini-2.5-pro
 - ✅ Installed sqlite-vec extension (v0.1.6)
 - ✅ Added `embeddings` virtual table with vec0
 - ✅ Integrated semantic search into QueryEngine
-- See: `docs/PHASE-1-COMPLETION-SUMMARY.md`
+- See: `docs/.archive/PHASE-1-COMPLETION-SUMMARY.md`
 
 **Phase 2: Core sqlite-vec Integration** (October 28, 2025)
 - ✅ Extension loading with graceful fallback
 - ✅ Dense search integration
 - ✅ Comprehensive test coverage (26/26 tests passing)
-- See: `docs/PHASE-2-COMPLETION-SUMMARY.md`
+- See: `docs/.archive/PHASE-2-COMPLETION-SUMMARY.md`
 
 **Phase 3: Entity & Edge Embedding Generation** (October 28, 2025)
 - ✅ EntityEmbedder implementation (277 lines)
@@ -357,7 +371,7 @@ GEMINI_MODEL=gemini-2.5-pro
 - ✅ Repository indexing pipeline (641 lines)
 - ✅ Comprehensive testing (69 tests, 90% pass rate)
 - ✅ End-to-end integration with sample repository
-- See: `docs/PHASE-3-COMPLETION-SUMMARY.md`
+- See: `docs/.archive/PHASE-3-COMPLETION-SUMMARY.md`
 
 ### 🔮 Future Work (Phase 4 Options)
 
@@ -375,6 +389,7 @@ GEMINI_MODEL=gemini-2.5-pro
 - Memory optimization for large repositories
 
 **Future Advanced Features:**
+- DMR (Docker Model Runner) provider integration
 - Dynamic embedding dimensions
 - Model versioning and migration tools
 - Community detection and PageRank
@@ -396,19 +411,20 @@ GEMINI_MODEL=gemini-2.5-pro
 
 ### Documentation Location Rules
 
-**IMPORTANT:** Do NOT create documentation files in the repository root.
+**IMPORTANT:** Do NOT create documentation files in the repository root (except CONSTITUTION.md, CLAUDE.md, AGENTS.md, README.md, and governance docs).
 
 **Correct locations:**
 - **Architecture/Usage docs:** `docs/` directory
 - **Planning documents:** `docs/planning/` directory
 - **Historical archives:** `docs/.archive/` directory
-- **Project instructions:** `CLAUDE.md` (root only)
+- **Governance:** Root level (CONSTITUTION.md, CLAUDE.md, AGENTS.md)
 - **README:** `README.md` (root only)
 
 **Examples:**
 - ✅ `docs/EMBEDDING-ARCHITECTURE.md` - Current architecture
 - ✅ `docs/planning/PHASE-4-INTEGRATION-PLAN.md` - Future plans
 - ✅ `docs/.archive/PHASE-1-COMPLETION-SUMMARY.md` - Historical record
+- ✅ `CONSTITUTION.md` - Governance (root level)
 - ❌ `EMBEDDING-ARCHITECTURE.md` - WRONG (root clutter)
 - ❌ `PLANNING.md` - WRONG (belongs in docs/planning/)
 
@@ -433,83 +449,43 @@ Archive documents when:
 - API references
 - Setup/configuration guides
 
-## Task Management with Beads
+## Agent Best Practices
 
-### When to Use Beads
+### Before Starting Work
 
-Use `bd` (beads) for:
-- **Complex multi-step features** (3+ coordinated changes)
-- **Cross-cutting changes** (affects multiple subsystems)
-- **Phased implementations** (Phase 4A, 4B, 4C, etc.)
-- **Breaking down large epics** (Legilimens integration, etc.)
+1. **Read CONSTITUTION.md** - Understand model specs and invariants
+2. **Check existing tests** - See how features are tested
+3. **Review error types** - Use structured errors from `src/types/errors.ts`
+4. **Verify TypeScript config** - Ensure strict mode compliance
 
-Do NOT use beads for:
-- Simple bug fixes
-- Documentation updates
-- Single-file changes
-- Minor refactoring
+### During Implementation
 
-### Beads Workflow for GraphRAG
+1. **Use type-safe patterns** - No `any` types (enforced by ESLint)
+2. **Add comprehensive tests** - Target 90%+ coverage
+3. **Document in code comments** - Reference CONSTITUTION.md where relevant
+4. **Handle errors gracefully** - Use structured error types
+5. **Follow import conventions** - Always use `.js` extensions
 
-1. **Check project status:**
-   ```bash
-   bd stats          # Overall project health
-   bd ready          # Tasks ready to start
-   bd list           # All tasks with filters
-   ```
+### After Implementation
 
-2. **Work on specific task:**
-   ```bash
-   bd update <task-id> --status in_progress  # Start working
-   bd close <task-id>                         # Mark complete
-   ```
-
-3. **Create dependencies:**
-   ```bash
-   bd dep <from-id> <to-id>  # Task dependency
-   ```
-
-4. **Delegate to implementation agent:**
-   ```bash
-   # For complex subtasks, use implementation-specialized agents
-   @coder "Complete beads task <task-id>"
-   ```
-
-### Current Beads Structure
-
-Check `bd stats` for current tasks. Typical structure for Phase 4:
-
-```
-Epic: Phase 4 - Legilimens Integration
-├── Phase 4A: GraphRAG Workspace Setup
-│   ├── Copy source files
-│   ├── Update build config
-│   └── Test standalone build
-├── Phase 4B: Automatic Indexing
-│   ├── Create GraphRAG wrapper
-│   ├── Update gateway generation
-│   └── Configuration management
-└── Phase 4C: CLI Commands
-    ├── Implement index command
-    ├── Implement query command
-    └── Update main menu
-```
-
-### Integration with Documentation
-
-When completing beads tasks:
-1. Update relevant documentation in `docs/`
-2. Move completed plans to `docs/.archive/`
-3. Update `CLAUDE.md` if architecture changes
-4. Create completion summary if phase complete
+1. **Run tests** - `npm test` (target 90%+ pass rate)
+2. **Type check** - `npm run typecheck` (must pass)
+3. **Lint** - `npm run lint` (must pass)
+4. **Update docs** - If architecture or APIs changed
+5. **Commit messages** - Clear, descriptive, reference issues/PRs
 
 ## Documentation
 
 **Primary docs location:** `docs/`
 
+**Governance:**
+- `CONSTITUTION.md` - **Canonical source of truth** for models and architecture
+- `AGENTS.md` - This file (agent guidance)
+- `CLAUDE.md` - Claude Code specific guidance
+
 **Current Architecture & Status:**
-- `docs/SQLITE-VEC-STATUS-CURRENT.md` - **Current implementation status** (Phase 1-3 complete)
-- `docs/DYNAMIC-HYBRID-SEARCH-INTEGRATION.md` - **Source of truth for hybrid search** (fully implemented)
+- `docs/SQLITE-VEC-STATUS-CURRENT.md` - Current implementation status (Phase 1-3 complete)
+- `docs/DYNAMIC-HYBRID-SEARCH-INTEGRATION.md` - Hybrid search architecture (fully implemented)
 - `docs/EMBEDDING-ARCHITECTURE.md` - Hybrid symbolic + embedding approach
 - `docs/EMBEDDING-USAGE.md` - Embedding integration guide
 - `docs/EDGE_EMBEDDER_USAGE.md` - Edge embedding details
@@ -546,3 +522,30 @@ Automated testing with Vitest:
 - `npm run dev` - Run main application
 - `npm run examples:embedding` - Test embedding integration
 - `npm run mcp:dev` - Test MCP server
+
+## Agent-Specific Notes
+
+### For Cursor / Copilot
+
+- Use `@workspace` context for codebase-wide questions
+- Reference CONSTITUTION.md explicitly when making model decisions
+- Always run `npm run validate` before committing
+
+### For Aider
+
+- Use `/ask` to clarify architecture before implementing
+- Use `/add` to include CONSTITUTION.md in context for model-related changes
+- Use `/test` to run test suite after changes
+
+### For Claude Code
+
+- See CLAUDE.md for Claude Code specific guidance
+- Use beads (`bd`) for complex multi-step features
+- Follow task management workflow in CLAUDE.md
+
+### For Other Agents
+
+- Always read CONSTITUTION.md before making architectural decisions
+- Use generic LLM interfaces (don't hardcode model names)
+- Add tests for all new features
+- Update documentation when adding features

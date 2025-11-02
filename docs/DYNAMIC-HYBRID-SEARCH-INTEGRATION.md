@@ -632,11 +632,11 @@ SciPhi/Triplex (Phi-3 3.8B finetune) - Extract [s,p,o] triples from code/docs Em
 
 IBM Granite Embedding (125M-278M) - Vectorize BOTH entities AND edges Entities: "name :: kind :: hints" → vec0 Edges: "S <predicate> O :: context:..." → vec0 Enables similarity search for entities AND relationships Query Analysis (Current):
 
-IBM Granite 3.1 (2B-8B) - Powers dynamic hybrid search classification Optional Reasoning:
+IBM Granite 4.0 Micro (~3B) - Powers dynamic hybrid search classification Optional Reasoning:
 
 TIGER-Lab/StructLM-7B (Q4 quantized) - Graph inference after KG is built Resource Requirements:
 
-Minimum: 4-5GB RAM (Triplex + Granite Embedding) Recommended: 6-7GB RAM (+ Granite 3.1 2B) Full stack: 10-12GB RAM (+ StructLM-7B Q4) Documentation Updated:
+Minimum: 4-5GB RAM (Triplex + Granite Embedding) Recommended: 7-8GB RAM (+ Granite 4.0 Micro ~3B) Full stack: 11-13GB RAM (+ StructLM-7B Q4) Documentation Updated:
 
 docs/SQLITE-VEC-INTEGRATION-PLAN.md - Full model recommendations section with architecture diagram README.md - Prominent model recommendations section docs/MCP-QUICKSTART.md - Recommended models table Code comments in query-analyzer.ts, hybrid-search.ts, graph-database.ts Current Architecture Code/Documentation ↓ Triplex Extractor (3.8B) ↓ [subject, predicate, object] + context ↓ ┌────┴────┐ │ │ Granite Granite (entities) (edges) │ │ "name::kind" "S<p>O::ctx" │ │ └────┬────┘ ↓ sqlite-vec ↓ 4-Way Hybrid Search:
 
