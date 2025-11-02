@@ -407,7 +407,7 @@ NODE_OPTIONS="--max-old-space-size=4096" npm run examples:markdown
 // Use faster model
 const llmModel = createLanguageModel({
   provider: 'llamacpp',
-  llamacppModelPath: './models/granite-3.1-2b.gguf' // Smaller, faster
+  llamacppModelPath: './models/granite-4.0-micro.gguf' // Balanced performance
 });
 
 // Larger chunks

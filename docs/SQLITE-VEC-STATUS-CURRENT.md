@@ -90,9 +90,9 @@ See: `docs/planning/PHASE-4-INTEGRATION-PLAN.md`
 - `embeddings` - vec0 virtual table (768 dimensions)
 
 **Models:**
-- **Triple Extraction:** SciPhi/Triplex (3.8B) - planned
+- **Triple Extraction:** SciPhi/Triplex (3.8B) - MVP target
 - **Embeddings:** IBM Granite Embedding (125M-278M)
-- **Query Analysis:** IBM Granite 3.1 (2B-8B)
+- **Query Analysis & MCP Attendant:** IBM Granite 4.0 Micro (~3B, 128k context)
 - **Optional Reasoning:** StructLM-7B (Q4 quantized)
 
 ## Quick Links

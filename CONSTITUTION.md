@@ -361,6 +361,23 @@ If a model fails or is unavailable:
 
 ---
 
+## Future Enhancements
+
+### Planned Provider Additions
+
+**Docker Model Runner (DMR) Provider** - *Documentation Only*
+- OpenAI-compatible API for Docker-based model serving
+- Replaces llama.cpp for CLI utility integration
+- Maintains same model stack (Triplex, Granite Embedding, Granite 4.0 Micro)
+- Implementation: Straightforward OpenAI SDK adapter
+- Configuration: `DMR_API_URL` and `DMR_MODEL` environment variables
+- Status: Planned for integration with Legilimens CLI migration
+- No change to CONSTITUTION model specifications required
+
+This provider addition does **not** affect the canonical model stack defined in this document.
+
+---
+
 ## Version History
 
 ### 1.0.0 (November 2, 2025)
