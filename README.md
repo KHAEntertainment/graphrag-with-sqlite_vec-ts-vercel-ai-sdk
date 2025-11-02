@@ -1,4 +1,4 @@
-# GraphRAG with SQLite - TypeScript Edition
+# GraphRAG with SQLite-Vec - TypeScript Edition
 
 > **TypeScript implementation** of GraphRAG with SQLite, featuring multi-provider AI support and optional semantic search capabilities. Based on Vercel AI SDK with LLama.CPP Support! 
 
