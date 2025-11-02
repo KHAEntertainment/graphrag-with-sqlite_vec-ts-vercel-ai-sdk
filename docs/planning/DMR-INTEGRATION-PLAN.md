@@ -1,10 +1,10 @@
 # Docker Model Runner (DMR) Integration Plan
 
 **Status:** Planning Phase
-**Priority:** High (CLI Migration Dependency)
+**Priority:** High (CLI Integration Requirement)
 **Complexity:** Low (OpenAI-Compatible)
 **Date:** November 2, 2025
-**Version:** 1.0.0
+**Version:** 1.1.0 (Revised: DMR as Additional Provider)
 
 > **📖 Source of Truth:** See [CONSTITUTION.md](../../CONSTITUTION.md) for locked model specifications
 
@@ -18,7 +18,7 @@
 - [Implementation Plan](#implementation-plan)
 - [Configuration](#configuration)
 - [Testing Strategy](#testing-strategy)
-- [Migration Path](#migration-path)
+- [DMR Setup Guide](#dmr-setup-guide)
 
 ---
 
@@ -26,12 +26,15 @@
 
 ### Motivation
 
-Docker Model Runner (DMR) provides an OpenAI-compatible API for local model inference via Docker. This integration enables:
+Docker Model Runner (DMR) provides an OpenAI-compatible API for local model inference via Docker. This integration adds DMR as **an additional provider option** alongside llamacpp and OpenAI, enabling:
 
-1. **Unified Deployment:** Docker-based model serving (replacing llama.cpp)
-2. **OpenAI Compatibility:** Seamless integration with Vercel AI SDK's OpenAI provider
-3. **CLI Integration:** Aligns with Legilimens CLI migration to DMR
-4. **No Model Stack Changes:** Uses same models (Triplex, Granite 4.0 Micro, Granite Embedding)
+1. **Multi-Provider Choice:** Users can choose llamacpp, OpenAI, or DMR based on their deployment needs
+2. **Docker-Based Deployment:** Simplified model serving via Docker containers (for users who prefer this approach)
+3. **OpenAI Compatibility:** Seamless integration with Vercel AI SDK's OpenAI provider
+4. **CLI Integration:** Enables Legilimens CLI to use DMR for its deployment model
+5. **No Model Stack Changes:** Uses same locked models (Triplex, Granite 4.0 Micro, Granite Embedding)
+
+**Important:** This does NOT deprecate llamacpp. Both llamacpp and DMR remain fully supported as equal provider options.
 
 ### Key Advantage
 
@@ -74,13 +77,15 @@ Base URL: http://localhost:12434/
 src/providers/
 ├── factory.ts        # createLanguageModel() - Provider selection
 ├── config.ts         # Environment variable loading
-├── llamacpp.ts       # llama.cpp provider (to be replaced)
-└── openai.ts         # OpenAI provider (can be reused!)
+├── llamacpp.ts       # llama.cpp provider (KEEP - fully supported)
+└── openai.ts         # OpenAI provider (can be reused for DMR!)
 ```
 
-**Key Insight:** The existing `openai.ts` provider already wraps `@ai-sdk/openai`. We just need to:
+**Key Insight:** The existing `openai.ts` provider already wraps `@ai-sdk/openai`. For DMR, we just need to:
 1. Point it to a different base URL (`http://localhost:12434/`)
 2. Use DMR model names (e.g., `ai/granite-4.0-micro`)
+
+This allows DMR to coexist with llamacpp and OpenAI as equal provider options.
 
 ### Proposed DMR Provider Architecture
 
@@ -125,13 +130,15 @@ export function createLanguageModel(config: ProviderConfig) {
 ```typescript
 export function createLanguageModel(config: ProviderConfig) {
   switch (config.provider) {
-    case 'llamacpp': return createLlamaCppProvider(config); // Keep for backward compat
-    case 'openai': return createOpenAIProvider(config);
-    case 'dmr': return createDMRProvider(config); // New!
+    case 'llamacpp': return createLlamaCppProvider(config); // Fully supported
+    case 'openai': return createOpenAIProvider(config);     // Fully supported
+    case 'dmr': return createDMRProvider(config);           // New! Fully supported
     default: throw new Error(`Unknown provider: ${config.provider}`);
   }
 }
 ```
+
+**All three providers have equal status and are fully supported.**
 
 ---
 
@@ -164,12 +171,13 @@ DMR_MODEL_GRANITE_MICRO=ai/granite-4.0:micro-Q4_K_M
 DMR_MODEL_GRANITE_EMBEDDING=ai/granite-embedding:125m
 ```
 
-**Fallback Strategy:**
-If a model isn't available in DMR:
-1. Log warning
-2. Fall back to llamacpp (if configured)
-3. Fall back to OpenAI API (if configured)
-4. Error if no fallback available
+**Note on Provider Selection:**
+Each provider (llamacpp, OpenAI, DMR) is independent. Users choose ONE provider via `AI_PROVIDER` environment variable:
+- `AI_PROVIDER=llamacpp` - Use llama.cpp with local GGUF models
+- `AI_PROVIDER=openai` - Use OpenAI cloud API
+- `AI_PROVIDER=dmr` - Use Docker Model Runner with containerized models
+
+There is no automatic fallback between providers - users explicitly choose their preferred deployment model.
 
 ---
 
@@ -349,31 +357,6 @@ If a model isn't available in DMR:
 
 ---
 
-### Phase 5: Migration & Deprecation (Optional)
-
-**Goal:** Deprecate llamacpp provider (optional)
-
-**Tasks:**
-
-1. **Deprecation Notice**
-   - Add deprecation warning to llamacpp provider
-   - Update docs recommending DMR over llamacpp
-
-2. **Migration Script**
-   - Script to convert `.env` from llamacpp to DMR
-   - Mapping llamacpp model paths to DMR model names
-
-3. **Backward Compatibility**
-   - Keep llamacpp provider for now (deprecated but functional)
-   - Consider removing in v2.0.0
-
-**Acceptance Criteria:**
-- Deprecation warnings logged when using llamacpp
-- Migration script converts `.env` correctly
-- Both providers work side-by-side
-
----
-
 ## Configuration
 
 ### Environment Variables
@@ -483,9 +466,11 @@ export type ProviderType = 'llamacpp' | 'openai' | 'dmr';
 
 ---
 
-## Migration Path
+## DMR Setup Guide
 
-### From llama.cpp to DMR
+### Setting Up DMR Provider
+
+This guide shows how to configure GraphRAG to use DMR as your AI provider. This is an alternative to llamacpp or OpenAI - you can choose whichever provider suits your deployment needs.
 
 **Step 1: Install DMR**
 ```bash
@@ -514,15 +499,18 @@ docker model pull ai/granite-embedding:125m
 docker model list
 ```
 
-**Step 3: Update Environment Variables**
+**Step 3: Configure Environment Variables**
 ```bash
-# Before (llamacpp)
-AI_PROVIDER=llamacpp
-LLAMACPP_MODEL_PATH=./models/granite-4.0-micro.gguf
-
-# After (DMR)
+# Set DMR as your provider
 AI_PROVIDER=dmr
+
+# Configure DMR model names
 DMR_MODEL_GRANITE_MICRO=ai/granite-4.0:micro-Q4_K_M
+DMR_MODEL_TRIPLEX=ai/triplex:3.8B-Q4_K_M
+DMR_MODEL_GRANITE_EMBEDDING=ai/granite-embedding:125m
+
+# Optional: Custom DMR base URL (default: http://localhost:12434)
+# DMR_BASE_URL=http://custom-host:12434
 ```
 
 **Step 4: Test**
@@ -534,11 +522,7 @@ npm run dev
 npm run mcp:dev
 ```
 
-**Step 5: Remove llamacpp Models (Optional)**
-```bash
-# Free up disk space
-rm -rf ./models/*.gguf
-```
+**Done!** You're now using DMR as your AI provider. You can switch back to llamacpp or OpenAI anytime by changing the `AI_PROVIDER` environment variable.
 
 ---
 
@@ -567,14 +551,15 @@ rm -rf ./models/*.gguf
 
 ### Graceful Degradation
 
-**If DMR is unavailable:**
-1. Check for `DMR_SKIP_VALIDATION=true` (CI/CD mode)
+**If DMR is unavailable when `AI_PROVIDER=dmr`:**
+1. Check for `DMR_SKIP_VALIDATION=true` (CI/CD mode - skip validation)
 2. If validation fails and not skipped:
-   - Log detailed error message
-   - Suggest installation steps
-   - Fall back to llamacpp (if configured)
-   - Fall back to OpenAI API (if configured)
-3. Throw `DMRSetupError` if no fallback available
+   - Log detailed error message with installation steps
+   - Provide clear instructions on how to set up DMR
+   - Suggest alternative: use `AI_PROVIDER=llamacpp` or `AI_PROVIDER=openai` if DMR cannot be installed
+3. Throw `DMRSetupError` with actionable guidance
+
+**Note:** There is no automatic fallback to other providers. Users must explicitly choose a different provider by changing `AI_PROVIDER` in their environment configuration.
 
 **Error Classes:**
 ```typescript
@@ -622,12 +607,7 @@ export class DMRSetupError extends Error {
 - [ ] Add DMR config to `.env.example`
 - [ ] Write integration tests
 - [ ] Manual testing on Linux/Mac/Windows
-
-### Phase 5: Migration (Optional)
-- [ ] Add deprecation warning to llamacpp provider
-- [ ] Create migration script for `.env` conversion
-- [ ] Update documentation with migration guide
-- [ ] Plan llamacpp removal for v2.0.0
+- [ ] Verify all 3 providers (llamacpp, OpenAI, DMR) work independently
 
 ---
 
@@ -652,7 +632,7 @@ export class DMRSetupError extends Error {
 **Nice to Have:**
 1. 📋 Automated model pulling
 2. 📋 Interactive setup script
-3. 📋 llamacpp deprecation
+3. 📋 Provider switching utility (help users switch between llamacpp/OpenAI/DMR)
 
 ### Performance Benchmarks
 
@@ -675,13 +655,13 @@ export class DMRSetupError extends Error {
 | **Phase 2: Detection & Validation** | 1-2 days | Phase 1 |
 | **Phase 3: Model Management** | 2-3 days (Optional) | Phase 2 |
 | **Phase 4: Integration & Testing** | 2-3 days | Phase 1, 2 |
-| **Phase 5: Migration** | 1-2 days (Optional) | Phase 4 |
 
-**Total Time Estimate:** 5-12 days (depending on optional phases)
+**Total Time Estimate:** 5-10 days (depending on whether Phase 3 is included)
 
 **Recommended Approach:**
-- Start with Phases 1, 2, 4 (core + testing) = 5-7 days
-- Defer Phases 3, 5 to later iterations
+- **MVP (5-7 days):** Phases 1, 2, 4 (core provider + validation + testing)
+- **Enhanced (8-10 days):** Add Phase 3 for automated model management
+- Phase 3 is optional and can be deferred to a later iteration
 
 ---
 
