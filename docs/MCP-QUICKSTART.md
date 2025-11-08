@@ -1,6 +1,26 @@
-# GraphRAG MCP Server - Quick Start
+# GraphRAG MCP Servers - Quick Start
 
 Get your MCP server running with Claude Desktop in 5 minutes!
+
+## Two Server Options
+
+GraphRAG provides two MCP server implementations:
+
+| Server | Best For | Token Efficiency | Latency |
+|--------|----------|------------------|---------|
+| **Standard** (`server.js`) | Most users, simple queries | Good | Fast |
+| **Code Execution** (`server-code-execution.js`) | Complex multi-step workflows, parallel queries | **Excellent** (up to 98.7% reduction) | **Ultra-fast** (single round-trip) |
+
+**Choose Code Execution if:**
+- You need multi-step queries (list → query → analyze)
+- You want parallel queries across repositories
+- You need conditional logic based on results
+- You want minimum latency
+
+**Choose Standard if:**
+- You want simple, single-purpose queries
+- You prefer individual tool calls
+- You don't need custom logic
 
 ## Prerequisites
 
@@ -34,7 +54,7 @@ npm install
 npm run build
 ```
 
-This creates `dist/mcp/server.js`.
+This creates `dist/mcp/server.js` (standard) and `dist/mcp/server-code-execution.js` (code execution).
 
 ## Step 2: Configure Claude Desktop
 
@@ -50,7 +70,7 @@ This creates `dist/mcp/server.js`.
 %APPDATA%\Claude\claude_desktop_config.json
 ```
 
-### Add GraphRAG Server
+### Add GraphRAG Server (Standard)
 
 Edit the config file and add:
 
@@ -70,6 +90,29 @@ Edit the config file and add:
   }
 }
 ```
+
+### OR: Add GraphRAG Server (Code Execution)
+
+For advanced multi-step queries:
+
+```json
+{
+  "mcpServers": {
+    "graphrag-code-exec": {
+      "command": "node",
+      "args": [
+        "/Users/you/example-graphrag-with-sqlite/dist/mcp/server-code-execution.js"
+      ],
+      "cwd": "/Users/you/my-project",
+      "env": {
+        "GRAPHRAG_DB_PATH": ".graphrag/database.sqlite"
+      }
+    }
+  }
+}
+```
+
+**You can run both servers simultaneously!** Just use different names (`graphrag` and `graphrag-code-exec`).
 
 **Note:** GRAPHRAG_DB_PATH resolves relative to cwd. Use an absolute path if your DB isn't under the project root.
 
@@ -111,12 +154,21 @@ Claude will use `get_cross_references`.
 
 ## Verification
 
-You should see the MCP server in Claude Desktop's tool list:
+### Standard Server Tools
+
+You should see these tools in Claude Desktop:
 - `list_repositories`
 - `query_repositories`
 - `query_dependency`
 - `get_cross_references`
 - `smart_query`
+
+### Code Execution Server Tools
+
+You should see this tool in Claude Desktop:
+- `execute_graphrag_code` - Execute JavaScript with access to all GraphRAG functions
+
+**See the [Code Execution API Reference](./MCP-CODE-EXECUTION-API.md) for detailed usage.**
 
 ## Troubleshooting
 
@@ -220,8 +272,12 @@ Once you have repositories indexed:
 For testing during development:
 
 ```bash
-# Run MCP server directly
+# Standard server
 GRAPHRAG_DB_PATH=.graphrag/database.sqlite npm run mcp:dev
+
+# Code execution server
+GRAPHRAG_DB_PATH=.graphrag/database.sqlite npm run mcp:code-exec:dev
+
 # Windows (cmd)
 set GRAPHRAG_DB_PATH=.graphrag\database.sqlite && npm run mcp:dev
 # Windows (PowerShell)
