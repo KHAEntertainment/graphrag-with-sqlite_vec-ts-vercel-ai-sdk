@@ -1,0 +1,1335 @@
+/**
+ * GraphRAG MCP Server with Code Execution - Local-First Architecture
+ *
+ * This MCP server provides context-efficient access to the GraphRAG system
+ * by querying a local SQLite database with sqlite-vec for embeddings.
+ *
+ * Key features:
+ * - 100% offline operation (reads from local .graphrag/database.sqlite)
+ * - Multi-repository support (project-scoped indexing)
+ * - Intelligent attendant filtering (Granite Micro 4.0)
+ * - Optional escalation to Gemini 2.5 Pro for complex queries
+ * - **NEW: Code execution sandbox for multi-step queries**
+ *
+ * Code Execution:
+ * - Secure sandboxed execution with isolated-vm
+ * - 5s timeout per execution
+ * - 128MB memory limit
+ * - No access to Node.js APIs (fs, net, etc.)
+ * - Can compose multi-step queries in single tool call
+ *
+ * @see docs/MCP-CODE-EXECUTION-ANALYSIS.md for architecture details
+ */
+
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+import { pathToFileURL } from 'url';
+import { GraphDatabaseConnection } from '../lib/graph-database.js';
+import { Logger } from '../lib/logger.js';
+import { QueryEngine } from './tools/query-engine.js';
+import { HybridSearchEngine } from './tools/hybrid-search.js';
+import type { HybridSearchOptions, HybridSearchResult } from './tools/hybrid-search.js';
+import { GraniteAttendant, GeminiAttendant } from './attendant/granite-micro.js';
+import type { LanguageModelV1 } from 'ai';
+import type { CombinedResults, GraphResult } from './tools/query-engine.js';
+import { GraphRAGSandbox } from './execution/sandbox.js';
+
+/**
+ * Attendant mode options
+ */
+type AttendantMode = 'none' | 'granite' | 'gemini';
+
+/**
+ * Query repositories tool arguments
+ */
+interface QueryRepositoriesArgs {
+  query: string;
+  repositories?: string[];
+  attendant?: AttendantMode;
+  maxTokens?: number;
+}
+
+/**
+ * Query dependency tool arguments
+ */
+interface QueryDependencyArgs {
+  dependency: string;
+  repositories?: string[];
+  aspect?: string;
+  attendant?: AttendantMode;
+}
+
+/**
+ * Get cross references tool arguments
+ */
+interface GetCrossReferencesArgs {
+  repositories?: string[];
+  minStrength?: number;
+  attendant?: AttendantMode;
+}
+
+/**
+ * Smart query tool arguments
+ */
+interface SmartQueryArgs {
+  query: string;
+  repositories?: string[];
+  useGraph?: boolean;
+  attendant?: AttendantMode;
+}
+
+/**
+ * Code execution tool arguments
+ */
+interface ExecuteCodeArgs {
+  code: string;
+  timeout?: number;
+}
+
+/**
+ * GraphRAG MCP Server Configuration
+ */
+export interface GraphRAGMCPConfig {
+  /** Path to the local SQLite database */
+  dbPath?: string;
+  /** Default attendant mode */
+  defaultAttendant?: AttendantMode;
+  /** Enable auto-escalation to more powerful models */
+  autoEscalate?: boolean;
+  /** Gemini API configuration (for escalation) */
+  geminiConfig?: {
+    apiKey: string;
+    model?: string;
+  };
+  /** Language model for Granite Micro attendant */
+  model?: LanguageModelV1;
+  /** Embedding provider for semantic search */
+  embeddingProvider?: { embed: (text: string) => Promise<number[]> };
+}
+
+/**
+ * Repository metadata from local database
+ */
+export interface RepositoryMetadata {
+  id: string;
+  name: string;
+  indexed_at: string;
+  version?: string;
+  branch?: string;
+  metadata?: string;
+}
+
+/**
+ * Main MCP Server class
+ */
+export class GraphRAGMCPServer {
+  private server: Server;
+  private db: GraphDatabaseConnection;
+  private logger: Logger;
+  private queryEngine: QueryEngine;
+  private hybridSearch: HybridSearchEngine;
+  private graniteAttendant: GraniteAttendant;
+  private geminiAttendant?: GeminiAttendant;
+  private sandbox: GraphRAGSandbox; // NEW: Code execution sandbox
+  private config: {
+    dbPath: string;
+    defaultAttendant: AttendantMode;
+    autoEscalate: boolean;
+    geminiConfig?: { apiKey: string; model?: string };
+    model?: LanguageModelV1;
+    embeddingProvider?: { embed: (text: string) => Promise<number[]> };
+  };
+
+  constructor(config: GraphRAGMCPConfig = {}) {
+    this.logger = new Logger();
+
+    // Set default configuration
+    this.config = {
+      dbPath: config.dbPath || '.graphrag/database.sqlite',
+      defaultAttendant: config.defaultAttendant || 'granite-micro',
+      autoEscalate: config.autoEscalate ?? true,
+    };
+
+    // Add optional properties only if defined
+    if (config.geminiConfig) {
+      this.config.geminiConfig = config.geminiConfig;
+    }
+    if (config.model) {
+      this.config.model = config.model;
+    }
+    if (config.embeddingProvider) {
+      this.config.embeddingProvider = config.embeddingProvider;
+    }
+
+    // Connect to LOCAL database (no GitHub access)
+    this.db = new GraphDatabaseConnection(this.config.dbPath);
+
+    // Initialize query engine
+    this.queryEngine = new QueryEngine(this.db.getSession());
+
+    // Initialize hybrid search engine
+    this.hybridSearch = new HybridSearchEngine(
+      this.db.getSession(),
+      config.model,
+      config.embeddingProvider
+    );
+
+    // Initialize attendants
+    this.graniteAttendant = new GraniteAttendant(config.model);
+    if (config.geminiConfig) {
+      this.geminiAttendant = new GeminiAttendant(config.geminiConfig);
+    }
+
+    // NEW: Initialize code execution sandbox
+    this.sandbox = new GraphRAGSandbox(this.config.dbPath);
+
+    this.logger.info(`GraphRAG MCP Server (Code Execution) initializing in local mode (db: ${this.config.dbPath})`);
+
+    // Initialize MCP server
+    this.server = new Server(
+      {
+        name: 'graphrag-mcp-server-code-execution',
+        version: '1.0.0',
+      },
+      {
+        capabilities: {
+          tools: {},
+          resources: {},
+        },
+      }
+    );
+
+    this.registerHandlers();
+  }
+
+  /**
+   * Register MCP protocol handlers
+   */
+  private registerHandlers(): void {
+    // List available tools
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      return {
+        tools: [
+          {
+            name: 'query_repositories',
+            description:
+              'Query across multiple indexed repositories with dynamic hybrid search (semantic + keyword + pattern + graph). ' +
+              'Automatically weights search strategies using LLM analysis for optimal results. ' +
+              'Returns filtered results based on attendant mode (none, granite-micro, or gemini-2.5-pro).',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Natural language query or specific technical question',
+                },
+                repositories: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description:
+                    "Repository IDs to search (e.g., ['vercel/ai', 'copilotkit/copilotkit']). " +
+                    'If not provided, searches all indexed repositories.',
+                },
+                attendant: {
+                  type: 'string',
+                  enum: ['none', 'granite-micro', 'gemini-2.5-pro'],
+                  description:
+                    "Attendant mode for filtering results. 'none' returns raw results, " +
+                    "'granite-micro' uses local filtering (default), 'gemini-2.5-pro' uses API for complex reasoning.",
+                },
+                maxTokens: {
+                  type: 'number',
+                  description:
+                    'Maximum tokens in response (default: 500). Used by attendant to limit output size.',
+                },
+              },
+              required: ['query'],
+            },
+          },
+          {
+            name: 'list_repositories',
+            description:
+              'List all repositories indexed in the local database for this project. ' +
+              'Shows repository ID, name, version, and when it was indexed.',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+          {
+            name: 'query_dependency',
+            description:
+              'Find information about a specific code dependency or entity. ' +
+              'Searches the local knowledge graph for entities and their relationships.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                dependency: {
+                  type: 'string',
+                  description:
+                    "Name of the dependency, entity, or concept to find (e.g., 'StreamingTextResponse', 'useChat')",
+                },
+                repositories: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Optional: limit search to specific repositories',
+                },
+                aspect: {
+                  type: 'string',
+                  enum: ['usage', 'relationships', 'implementation', 'all'],
+                  description:
+                    "Focus on specific aspect: 'usage' (how it's used), 'relationships' (what it connects to), " +
+                    "'implementation' (how it works), or 'all' (everything)",
+                },
+                attendant: {
+                  type: 'string',
+                  enum: ['none', 'granite-micro', 'gemini-2.5-pro'],
+                  description: 'Attendant mode for filtering results',
+                },
+              },
+              required: ['dependency'],
+            },
+          },
+          {
+            name: 'get_cross_references',
+            description:
+              'Find how different projects reference each other. ' +
+              'Discovers cross-repository dependencies and integration points.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                entity: {
+                  type: 'string',
+                  description: "Entity to find references to (e.g., 'StreamingTextResponse')",
+                },
+                sourceRepo: {
+                  type: 'string',
+                  description: "Repository where entity is defined (e.g., 'vercel/ai')",
+                },
+                minStrength: {
+                  type: 'number',
+                  description: 'Minimum relationship strength (0-1, default: 0.7)',
+                },
+              },
+              required: ['entity'],
+            },
+          },
+          {
+            name: 'smart_query',
+            description:
+              'Ask any natural language question about indexed repositories. ' +
+              'Automatically selects the best attendant based on query complexity. ' +
+              "Use this for general questions when you're not sure which specific tool to use.",
+            inputSchema: {
+              type: 'object',
+              properties: {
+                question: {
+                  type: 'string',
+                  description: 'Any natural language question about indexed repositories',
+                },
+                context: {
+                  type: 'string',
+                  description:
+                    "What you're trying to accomplish (helps attendant filter better). " +
+                    "Example: 'Building a streaming chat interface with AG-UI'",
+                },
+                forceAttendant: {
+                  type: 'string',
+                  enum: ['none', 'granite-micro', 'gemini-2.5-pro'],
+                  description: 'Override auto-selection of attendant',
+                },
+                maxTokens: {
+                  type: 'number',
+                  description: 'Maximum tokens in response (default: 500)',
+                },
+              },
+              required: ['question'],
+            },
+          },
+          {
+            name: 'execute_graphrag_code',
+            description:
+              'Execute JavaScript code to perform complex multi-step GraphRAG queries. ' +
+              'Enables composing multiple operations in a single execution. ' +
+              'Available functions: query_repositories(opts), query_dependency(opts), ' +
+              'get_cross_references(opts), list_repositories(), smart_query(opts). ' +
+              'Code runs in a secure sandbox with 5s timeout and 128MB memory limit. ' +
+              'Use async/await for all query functions. ' +
+              'Example: const results = await query_repositories({query: "streaming"}); return results;',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                code: {
+                  type: 'string',
+                  description:
+                    'JavaScript code to execute. Must use async/await. Returns the last expression value. ' +
+                    'Example: "const r1 = await query_repositories({query: \'api\'}); ' +
+                    'const r2 = await query_dependency({dependency: r1.results[0].id}); ' +
+                    'return {overview: r1, details: r2};"',
+                },
+                timeout: {
+                  type: 'number',
+                  description: 'Optional timeout in milliseconds (default: 5000, max: 10000)',
+                },
+              },
+              required: ['code'],
+            },
+          },
+        ],
+      };
+    });
+
+    // Handle tool calls
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+
+      try {
+        switch (name) {
+          case 'list_repositories':
+            return await this.handleListRepositories();
+
+          case 'query_repositories':
+            return await this.handleQueryRepositories(args);
+
+          case 'query_dependency':
+            return await this.handleQueryDependency(args);
+
+          case 'get_cross_references':
+            return await this.handleGetCrossReferences(args);
+
+          case 'smart_query':
+            return await this.handleSmartQuery(args);
+
+          case 'execute_graphrag_code':
+            return await this.handleCodeExecution(args);
+
+          default:
+            throw new Error(`Unknown tool: ${name}`);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Tool execution error (${name}):`, errorMessage);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error executing ${name}: ${errorMessage}`,
+            },
+          ],
+        };
+      }
+    });
+
+    // List resources
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      const repos = await this.getLocalRepositories();
+
+      return {
+        resources: repos.map((repo) => ({
+          uri: `graphrag://repo/${repo.id}`,
+          name: repo.name,
+          description: `Indexed repository: ${repo.id} (v${repo.version || 'unknown'})`,
+          mimeType: 'application/json',
+        })),
+      };
+    });
+
+    // Read resource
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      const uri = request.params.uri;
+
+      if (!uri.startsWith('graphrag://repo/')) {
+        throw new Error(`Invalid resource URI: ${uri}`);
+      }
+
+      const repoId = uri.replace('graphrag://repo/', '');
+      const repo = await this.getRepositoryById(repoId);
+
+      if (!repo) {
+        throw new Error(`Repository not found: ${repoId}`);
+      }
+
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'application/json',
+            text: JSON.stringify(repo, null, 2),
+          },
+        ],
+      };
+    });
+  }
+
+  /**
+   * Get all repositories from local database
+   */
+  private async getLocalRepositories(): Promise<RepositoryMetadata[]> {
+    // Check if repositories table exists
+    const tableCheck = this.db
+      .getSession()
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='repositories'")
+      .get();
+
+    if (!tableCheck) {
+      this.logger.warn('Repositories table not found - database may not be initialized');
+      return [];
+    }
+
+    const repos = this.db
+      .getSession()
+      .prepare('SELECT * FROM repositories')
+      .all() as RepositoryMetadata[];
+
+    return repos;
+  }
+
+  /**
+   * Get specific repository by ID
+   */
+  private async getRepositoryById(id: string): Promise<RepositoryMetadata | null> {
+    const tableCheck = this.db
+      .getSession()
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='repositories'")
+      .get();
+
+    if (!tableCheck) {
+      return null;
+    }
+
+    const repo = this.db.getSession().prepare('SELECT * FROM repositories WHERE id = ?').get(id) as
+      | RepositoryMetadata
+      | undefined;
+
+    return repo || null;
+  }
+
+  /**
+   * Handle list_repositories tool
+   */
+  private async handleListRepositories(): Promise<{
+    content: Array<{ type: string; text: string }>;
+  }> {
+    const repos = await this.getLocalRepositories();
+
+    if (repos.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'No repositories indexed yet. Use your CLI tool to index repositories first.',
+          },
+        ],
+      };
+    }
+
+    const repoList = repos
+      .map(
+        (repo) =>
+          `- **${repo.name}** (${repo.id})\n` +
+          `  Version: ${repo.version || 'unknown'}\n` +
+          `  Indexed: ${repo.indexed_at}\n` +
+          `  Branch: ${repo.branch || 'unknown'}`
+      )
+      .join('\n\n');
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `# Indexed Repositories (${repos.length})\n\n${repoList}`,
+        },
+      ],
+    };
+  }
+
+  /**
+   * Handle query_repositories tool
+   */
+  private async handleQueryRepositories(
+    args: QueryRepositoriesArgs
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    this.logger.info(`Query repositories: ${args.query}`);
+
+    const query = args.query;
+    const repositories = args.repositories;
+    const attendantMode = args.attendant || this.config.defaultAttendant || 'none';
+    const maxTokens = args.maxTokens || 500;
+
+    try {
+      // Use hybrid search engine for intelligent multi-strategy search
+      const hybridOptions: HybridSearchOptions = {
+        ...(repositories && { repositories }),
+        maxResults: 20,
+        explain: attendantMode === 'none', // Include explanations in raw mode
+      };
+
+      const hybridResult = await this.hybridSearch.search(query, hybridOptions);
+
+      // Log search metrics and analysis
+      this.logger.info(
+        `Hybrid search completed: ${hybridResult.results.length} results, ` +
+          `type=${hybridResult.analysis.query_type}, ` +
+          `time=${hybridResult.metrics.totalTime}ms`
+      );
+
+      // Find cross-references from hybrid results
+      const crossRefs = await this.queryEngine.findCrossReferencesFromResults(
+        hybridResult.results
+          .filter((r) => r.sources.dense !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            distance: 0,
+            metadata: r.metadata || {},
+          })),
+        []
+      );
+
+      // Format combined results for attendant
+      const combined = {
+        semantic: hybridResult.results
+          .filter((r) => r.sources.dense !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            distance: 0,
+            metadata: r.metadata || {},
+          })),
+        sparse: hybridResult.results
+          .filter((r) => r.sources.sparse !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            score: r.score,
+            metadata: r.metadata || {},
+          })),
+        pattern: hybridResult.results
+          .filter((r) => r.sources.pattern !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            match_type: 'fuzzy' as const,
+            score: r.score,
+            metadata: r.metadata || {},
+          })),
+        graph: hybridResult.results
+          .filter((r) => r.sources.graph !== undefined)
+          .map((r) => ({
+            id: r.id,
+            repo: r.repo,
+            type: 'entity',
+            properties: r.metadata || {},
+          })),
+        crossRefs: crossRefs,
+        totalTokens: this.queryEngine.estimateTokens({
+          semantic: hybridResult.results.map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            distance: 0,
+            metadata: {},
+          })),
+          sparse: [],
+          pattern: [],
+          graph: [],
+          crossRefs: crossRefs,
+          totalTokens: 0,
+        }),
+      };
+
+      // Filter through attendant (if not "none")
+      if (attendantMode === 'none') {
+        // Return raw results with hybrid search metrics
+        return {
+          content: [
+            {
+              type: 'text',
+              text: this.formatHybridResults(query, hybridResult, combined),
+            },
+          ],
+        };
+      }
+
+      // Select attendant
+      const attendant =
+        attendantMode === 'gemini-2.5-pro' && this.geminiAttendant
+          ? this.geminiAttendant
+          : this.graniteAttendant;
+
+      const filtered = await attendant.filter({
+        query,
+        context: args.context || undefined,
+        results: combined,
+        maxTokens,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              filtered.answer +
+              `\n\n---\n*Repositories: ${filtered.repositories.join(', ')}*\n` +
+              `*Query Type: ${hybridResult.analysis.query_type} (confidence: ${(hybridResult.analysis.confidence || 0).toFixed(2)})*\n` +
+              `*Search Coverage: Dense ${(hybridResult.coverage.dense * 100).toFixed(0)}%, ` +
+              `Sparse ${(hybridResult.coverage.sparse * 100).toFixed(0)}%, ` +
+              `Pattern ${(hybridResult.coverage.pattern * 100).toFixed(0)}%, ` +
+              `Graph ${(hybridResult.coverage.graph * 100).toFixed(0)}%*\n` +
+              `*Performance: ${hybridResult.metrics.totalTime}ms (dense: ${hybridResult.metrics.denseTime}ms, sparse: ${hybridResult.metrics.sparseTime}ms, pattern: ${hybridResult.metrics.patternTime}ms, graph: ${hybridResult.metrics.graphTime}ms)*\n` +
+              `*Efficiency: ${filtered.efficiency.originalTokens} → ${filtered.efficiency.filteredTokens} tokens (${isNaN(filtered.efficiency.reductionPercent) || !isFinite(filtered.efficiency.reductionPercent) ? 'N/A' : filtered.efficiency.reductionPercent + '%'} reduction)*\n` +
+              `*Attendant: ${attendantMode}*`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error in handleQueryRepositories:', errorMessage);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error querying repositories: ${errorMessage}`,
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Handle query_dependency tool
+   */
+  private async handleQueryDependency(
+    args: QueryDependencyArgs
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    this.logger.info(`Query dependency: ${args.dependency}`);
+
+    const dependency = args.dependency;
+    const repositories = args.repositories;
+    const aspect = args.aspect || 'all';
+    const attendantMode = args.attendant || this.config.defaultAttendant || 'none';
+
+    try {
+      // Search for the entity
+      const entityResults = await this.queryEngine.searchEntity(dependency, {
+        repositories,
+      });
+
+      // Get relationships if aspect includes them
+      let relationships: GraphResult[] = [];
+      if (aspect === 'relationships' || aspect === 'all') {
+        for (const entity of entityResults.slice(0, 3)) {
+          const rels = await this.queryEngine.getEntityRelationships(entity.id, {
+            repositories,
+          });
+          relationships.push(...rels);
+        }
+      }
+
+      const combined = {
+        semantic: [],
+        sparse: [],
+        pattern: [],
+        graph: [...entityResults, ...relationships],
+        crossRefs: [],
+        totalTokens: 0,
+      };
+
+      combined.totalTokens = this.queryEngine.estimateTokens(combined);
+
+      if (entityResults.length === 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `No results found for dependency: "${dependency}"\n\nTry:\n- Checking the spelling\n- Using a partial name\n- Listing repositories to see what's indexed`,
+            },
+          ],
+        };
+      }
+
+      // Filter through attendant if not "none"
+      if (attendantMode === 'none') {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: this.formatRawResults(`Dependency: ${dependency}`, combined),
+            },
+          ],
+        };
+      }
+
+      const attendant =
+        attendantMode === 'gemini-2.5-pro' && this.geminiAttendant
+          ? this.geminiAttendant
+          : this.graniteAttendant;
+
+      const filtered = await attendant.filter({
+        query: `Find information about ${dependency} (aspect: ${aspect})`,
+        results: combined,
+        maxTokens: args.maxTokens || 500,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              filtered.answer +
+              `\n\n---\n*Found ${entityResults.length} entities, ${relationships.length} relationships*\n` +
+              `*Attendant: ${attendantMode}*`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error in handleQueryDependency:', errorMessage);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error querying dependency: ${errorMessage}`,
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Handle get_cross_references tool
+   */
+  private async handleGetCrossReferences(
+    args: GetCrossReferencesArgs
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    this.logger.info(`Get cross-references for: ${args.entity}`);
+
+    const entity = args.entity as string;
+    const sourceRepo = args.sourceRepo as string | undefined;
+    const minStrength = (args.minStrength || 0.7) as number;
+
+    try {
+      // First, find the entity to determine its repo if not provided
+      let entityRepo = sourceRepo;
+      if (!entityRepo) {
+        const entityResults = await this.queryEngine.searchEntity(entity);
+        if (entityResults.length > 0 && entityResults[0]) {
+          entityRepo = entityResults[0].repo;
+        }
+      }
+
+      // Get all cross-references
+      const allRepos = await this.getLocalRepositories();
+      const crossRefs = await this.queryEngine.queryCrossReferences(
+        allRepos.map((r) => r.id),
+        minStrength
+      );
+
+      // Filter for this entity
+      const relevantRefs = crossRefs.filter(
+        (ref) =>
+          ref.from_entity.includes(entity) ||
+          ref.to_entity.includes(entity) ||
+          (entityRepo && (ref.from_repo === entityRepo || ref.to_repo === entityRepo))
+      );
+
+      if (relevantRefs.length === 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `No cross-references found for "${entity}"${entityRepo ? ` in ${entityRepo}` : ''}\n\nThis could mean:\n- The entity is not referenced across repositories\n- The entity name doesn't match exactly\n- Cross-references haven't been indexed yet`,
+            },
+          ],
+        };
+      }
+
+      const formatted = relevantRefs
+        .map(
+          (ref) =>
+            `- **${ref.from_repo}/${ref.from_entity}** → **${ref.to_repo}/${ref.to_entity}**\n` +
+            `  Type: ${ref.type}, Strength: ${typeof ref.strength === 'number' ? ref.strength.toFixed(2) : 'N/A'}`
+        )
+        .join('\n\n');
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              `# Cross-References for "${entity}"\n\n` +
+              `Found ${relevantRefs.length} cross-repository reference(s):\n\n${formatted}`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error in handleGetCrossReferences:', errorMessage);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error getting cross-references: ${errorMessage}`,
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Handle smart_query tool with auto-escalation
+   */
+  private async handleSmartQuery(
+    args: SmartQueryArgs
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    this.logger.info(`Smart query: ${args.question}`);
+
+    const question = args.question as string;
+    const context = args.context as string | undefined;
+    const maxTokens = (args.maxTokens || 500) as number;
+
+    try {
+      // Determine which repositories to query (all by default)
+      const allRepos = await this.getLocalRepositories();
+      const repositories = allRepos.map((r) => r.id);
+
+      // Use hybrid search with dynamic weighting
+      const hybridOptions: HybridSearchOptions = {
+        ...(repositories && repositories.length > 0 && { repositories }),
+        maxResults: 20,
+        explain: false,
+      };
+
+      const hybridResult = await this.hybridSearch.search(question, hybridOptions);
+
+      this.logger.info(
+        `Smart query hybrid search: ${hybridResult.results.length} results, ` +
+          `type=${hybridResult.analysis.query_type}, ` +
+          `time=${hybridResult.metrics.totalTime}ms`
+      );
+
+      // Find cross-references
+      const crossRefs = await this.queryEngine.findCrossReferencesFromResults(
+        hybridResult.results
+          .filter((r) => r.sources.dense !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            distance: 0,
+            metadata: r.metadata || {},
+          })),
+        []
+      );
+
+      const combined = {
+        semantic: hybridResult.results
+          .filter((r) => r.sources.dense !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            distance: 0,
+            metadata: r.metadata || {},
+          })),
+        sparse: hybridResult.results
+          .filter((r) => r.sources.sparse !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            score: r.score,
+            metadata: r.metadata || {},
+          })),
+        pattern: hybridResult.results
+          .filter((r) => r.sources.pattern !== undefined)
+          .map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            match_type: 'fuzzy' as const,
+            score: r.score,
+            metadata: r.metadata || {},
+          })),
+        graph: hybridResult.results
+          .filter((r) => r.sources.graph !== undefined)
+          .map((r) => ({
+            id: r.id,
+            repo: r.repo,
+            type: 'entity',
+            properties: r.metadata || {},
+          })),
+        crossRefs: crossRefs,
+        totalTokens: this.queryEngine.estimateTokens({
+          semantic: hybridResult.results.map((r) => ({
+            chunk_id: r.id,
+            repo: r.repo,
+            content: r.content,
+            distance: 0,
+            metadata: {},
+          })),
+          sparse: [],
+          pattern: [],
+          graph: [],
+          crossRefs: crossRefs,
+          totalTokens: 0,
+        }),
+      };
+
+      // Auto-select attendant if not forced
+      let attendantMode: AttendantMode;
+      if (args.forceAttendant) {
+        attendantMode = args.forceAttendant as AttendantMode;
+      } else {
+        // Auto-escalation logic
+        attendantMode = this.selectAttendant(question, repositories, combined.totalTokens);
+      }
+
+      // Apply attendant filtering
+      const attendant =
+        attendantMode === 'gemini-2.5-pro' && this.geminiAttendant
+          ? this.geminiAttendant
+          : attendantMode === 'none'
+            ? null
+            : this.graniteAttendant;
+
+      if (!attendant) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: this.formatHybridResults(question, hybridResult, combined),
+            },
+          ],
+        };
+      }
+
+      const filtered = await attendant.filter({
+        query: question,
+        context: context || undefined,
+        results: combined,
+        maxTokens,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              filtered.answer +
+              `\n\n---\n*Repositories: ${filtered.repositories.join(', ')}*\n` +
+              `*Query Type: ${hybridResult.analysis.query_type} (confidence: ${(hybridResult.analysis.confidence || 0).toFixed(2)})*\n` +
+              `*Search Time: ${hybridResult.metrics.totalTime}ms*\n` +
+              `*Efficiency: ${filtered.efficiency.originalTokens} → ${filtered.efficiency.filteredTokens} tokens (${isNaN(filtered.efficiency.reductionPercent) || !isFinite(filtered.efficiency.reductionPercent) ? 'N/A' : filtered.efficiency.reductionPercent + '%'} reduction)*\n` +
+              `*Attendant: ${attendantMode}${args.forceAttendant ? ' (forced)' : ' (auto-selected)'}*`,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error in handleSmartQuery:', errorMessage);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error processing smart query: ${errorMessage}`,
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Handle code execution tool
+   *
+   * Executes JavaScript code in a secure sandbox with access to GraphRAG API functions.
+   */
+  private async handleCodeExecution(
+    args: ExecuteCodeArgs
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    this.logger.info('[Code Execution] Received code execution request');
+
+    const code = args.code as string;
+    const timeout = Math.min((args.timeout as number) || 5000, 10000); // Max 10s
+
+    try {
+      // Check if sandbox is ready
+      if (!this.sandbox.isReady()) {
+        throw new Error('Sandbox not initialized. Server may still be starting.');
+      }
+
+      this.logger.debug('[Code Execution] Code:', code.substring(0, 200));
+
+      // Execute code in sandbox
+      const result = await this.sandbox.execute(code, timeout);
+
+      // Get memory stats for monitoring
+      const memStats = this.sandbox.getMemoryStats();
+      this.logger.info(
+        `[Code Execution] Success. Memory used: ${(memStats.used_heap_size / 1024 / 1024).toFixed(2)}MB`
+      );
+
+      // Format result
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error: any) {
+      const errorMessage = error.message || String(error);
+      this.logger.error('[Code Execution] Error:', errorMessage);
+
+      // Provide helpful error message
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              `❌ Code Execution Error\n\n${errorMessage}\n\n` +
+              `📚 Available Functions:\n` +
+              `- query_repositories(opts): Multi-repo hybrid search\n` +
+              `- query_dependency(opts): Find entity/dependency info\n` +
+              `- get_cross_references(opts): Find cross-repo references\n` +
+              `- list_repositories(): List indexed repositories\n` +
+              `- smart_query(opts): Natural language query\n\n` +
+              `💡 Tips:\n` +
+              `- Use async/await for all queries\n` +
+              `- Timeout limit: ${timeout}ms\n` +
+              `- Memory limit: 128MB\n` +
+              `- Example: const r = await query_repositories({query: 'api'}); return r;`,
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Auto-select attendant based on query complexity
+   */
+  private selectAttendant(
+    query: string,
+    repositories: string[],
+    resultSize: number
+  ): AttendantMode {
+    if (!this.config.autoEscalate) {
+      return this.config.defaultAttendant;
+    }
+
+    // Escalate to Gemini if available and complex query
+    if (this.geminiAttendant) {
+      // Many repositories = complex
+      if (repositories.length > 3) {
+        this.logger.info('Auto-escalating to Gemini: many repositories');
+        return 'gemini-2.5-pro';
+      }
+
+      // Large result set = needs smart filtering
+      if (resultSize > 5000) {
+        this.logger.info('Auto-escalating to Gemini: large result set');
+        return 'gemini-2.5-pro';
+      }
+
+      // Complex keywords = needs reasoning
+      const complexKeywords = [
+        'architecture',
+        'refactor',
+        'design',
+        'integrate',
+        'how do i',
+        'best way',
+        'should i',
+      ];
+      const lowerQuery = query.toLowerCase();
+      if (complexKeywords.some((kw) => lowerQuery.includes(kw))) {
+        this.logger.info('Auto-escalating to Gemini: complex query');
+        return 'gemini-2.5-pro';
+      }
+    }
+
+    // Default to granite-micro for simple queries
+    return 'granite-micro';
+  }
+
+  /**
+   * Format hybrid search results with detailed metrics
+   */
+  private formatHybridResults(
+    query: string,
+    hybridResult: HybridSearchResult,
+    combined: CombinedResults
+  ): string {
+    let output = `# Query: ${query}\n\n`;
+
+    // Add query analysis
+    output += `## Query Analysis\n`;
+    output += `- Type: **${hybridResult.analysis.query_type}**\n`;
+    output += `- Confidence: ${(hybridResult.analysis.confidence || 0).toFixed(2)}\n`;
+    output += `- Reasoning: ${hybridResult.analysis.reasoning}\n`;
+    output +=
+      `- Weights: Dense ${hybridResult.analysis.weights.dense}, ` +
+      `Sparse ${hybridResult.analysis.weights.sparse}, ` +
+      `Pattern ${hybridResult.analysis.weights.pattern}, ` +
+      `Graph ${hybridResult.analysis.weights.graph}\n\n`;
+
+    // Add performance metrics
+    output += `## Performance\n`;
+    output += `- Total Time: ${hybridResult.metrics.totalTime}ms\n`;
+    output += `- Dense Search: ${hybridResult.metrics.denseTime}ms\n`;
+    output += `- Sparse Search: ${hybridResult.metrics.sparseTime}ms\n`;
+    output += `- Pattern Search: ${hybridResult.metrics.patternTime}ms\n`;
+    output += `- Graph Search: ${hybridResult.metrics.graphTime}ms\n`;
+    output += `- Fusion: ${hybridResult.metrics.fusionTime}ms\n\n`;
+
+    // Add coverage stats
+    output += `## Coverage\n`;
+    output += `- Dense: ${(hybridResult.coverage.dense * 100).toFixed(0)}%\n`;
+    output += `- Sparse: ${(hybridResult.coverage.sparse * 100).toFixed(0)}%\n`;
+    output += `- Pattern: ${(hybridResult.coverage.pattern * 100).toFixed(0)}%\n`;
+    output += `- Graph: ${(hybridResult.coverage.graph * 100).toFixed(0)}%\n\n`;
+
+    // Add results with RRF scores
+    output += `## Results (${hybridResult.results.length})\n\n`;
+    hybridResult.results.slice(0, 10).forEach((result, idx) => {
+      output += `### Result #${idx + 1} (RRF Score: ${result.score.toFixed(4)})\n`;
+      output += `**Repository:** ${result.repo}\n`;
+      output += `**Sources:** ${Object.entries(result.sources)
+        .map(([type, rank]) => `${type}=#${rank}`)
+        .join(', ')}\n\n`;
+      output += `${result.content.slice(0, 300)}...\n\n`;
+
+      // Add ranking explanation if available
+      if (hybridResult.explanations && hybridResult.explanations[idx]) {
+        output += `**Ranking Explanation:**\n\`\`\`\n${hybridResult.explanations[idx]}\n\`\`\`\n\n`;
+      }
+    });
+
+    // Add cross-references if any
+    if (combined.crossRefs && combined.crossRefs.length > 0) {
+      output += `## Cross-References (${combined.crossRefs.length})\n\n`;
+      for (const r of combined.crossRefs.slice(0, 10)) {
+        output += `- ${r.from_repo}/${r.from_entity} → ${r.to_repo}/${r.to_entity} (${r.type}, strength: ${typeof r.strength === 'number' ? r.strength.toFixed(2) : 'N/A'})\n`;
+      }
+    }
+
+    return output;
+  }
+
+  /**
+   * Format raw query results without attendant filtering
+   */
+  private formatRawResults(query: string, results: CombinedResults): string {
+    let output = `# Query: ${query}\n\n`;
+
+    if (results.semantic && results.semantic.length > 0) {
+      output += `## Semantic Matches (${results.semantic.length})\n\n`;
+      for (const r of results.semantic.slice(0, 10)) {
+        output += `### ${r.repo} (similarity: ${(1 - r.distance).toFixed(2)})\n`;
+        output += `${r.content.slice(0, 300)}...\n\n`;
+      }
+    }
+
+    if (results.graph && results.graph.length > 0) {
+      output += `## Graph Entities (${results.graph.length})\n\n`;
+      for (const r of results.graph.slice(0, 10)) {
+        output += `### ${r.id} (${r.repo})\n`;
+        output += `${JSON.stringify(r.properties, null, 2)}\n\n`;
+      }
+    }
+
+    if (results.crossRefs && results.crossRefs.length > 0) {
+      output += `## Cross-References (${results.crossRefs.length})\n\n`;
+      for (const r of results.crossRefs.slice(0, 10)) {
+        output += `- ${r.from_repo}/${r.from_entity} → ${r.to_repo}/${r.to_entity} (${r.type}, strength: ${r.strength.toFixed(2)})\n`;
+      }
+    }
+
+    if (
+      (!results.semantic || results.semantic.length === 0) &&
+      (!results.graph || results.graph.length === 0) &&
+      (!results.crossRefs || results.crossRefs.length === 0)
+    ) {
+      output += `No results found.\n\n`;
+      output += `Try:\n`;
+      output += `- Checking if repositories are indexed (use list_repositories)\n`;
+      output += `- Using different search terms\n`;
+      output += `- Indexing more repositories\n`;
+    }
+
+    return output;
+  }
+
+  /**
+   * Start the MCP server
+   */
+  async start(): Promise<void> {
+    // Initialize sandbox before starting server
+    await this.sandbox.initialize();
+    this.logger.info('Code execution sandbox initialized');
+
+    const transport = new StdioServerTransport();
+    await this.server.connect(transport);
+
+    this.logger.info('GraphRAG MCP Server (Code Execution) running (local mode)');
+    this.logger.info(`Database: ${this.config.dbPath}`);
+    this.logger.info(`Default attendant: ${this.config.defaultAttendant}`);
+    this.logger.info('Code execution enabled: 5s timeout, 128MB memory limit');
+  }
+
+  /**
+   * Graceful shutdown
+   */
+  async close(): Promise<void> {
+    this.sandbox.dispose();
+    this.db.close();
+    await this.server.close();
+    this.logger.info('GraphRAG MCP Server stopped');
+  }
+}
+
+/**
+ * Main entry point when run directly
+ */
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  const config: GraphRAGMCPConfig = {
+    dbPath: process.env.GRAPHRAG_DB_PATH || '.graphrag/database.sqlite',
+    defaultAttendant: (process.env.GRAPHRAG_DEFAULT_ATTENDANT as AttendantMode) || 'granite-micro',
+    autoEscalate: process.env.GRAPHRAG_AUTO_ESCALATE !== 'false',
+  };
+
+  // Only add geminiConfig if API key is provided
+  if (process.env.GEMINI_API_KEY) {
+    config.geminiConfig = {
+      apiKey: process.env.GEMINI_API_KEY,
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-pro',
+    };
+  }
+
+  const server = new GraphRAGMCPServer(config);
+
+  server.start().catch((_error) => {
+    // Fatal server start error - use process.exit which is expected in this context
+    process.exit(1);
+  });
+
+  // Handle graceful shutdown
+  process.on('SIGINT', () => {
+    void server.close().then(() => process.exit(0));
+  });
+
+  process.on('SIGTERM', () => {
+    void server.close().then(() => process.exit(0));
+  });
+}
