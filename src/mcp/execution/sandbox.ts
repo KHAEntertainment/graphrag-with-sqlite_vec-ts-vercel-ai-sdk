@@ -73,13 +73,16 @@ export class GraphRAGSandbox {
       // Set global scope
       await jail.set('global', jail.derefInto());
 
-      // Inject console.log for debugging
-      const logCallback = new ivm.Reference((...args: any[]) => {
-        this.logger.info('[Sandbox Code]', ...args);
-      });
-      await jail.set('console', {
-        log: logCallback,
-      });
+      // Inject console.log for debugging using Callback
+      await jail.set(
+        'console',
+        new ivm.Reference({
+          log: new ivm.Callback((...args: any[]) => {
+            this.logger.info('[Sandbox Code]', ...args);
+          }),
+        }),
+        { reference: true }
+      );
 
       // Inject GraphRAG API functions
       // Note: We wrap each function to ensure proper async handling
@@ -128,7 +131,7 @@ export class GraphRAGSandbox {
       }
     });
 
-    await jail.set(name, ref);
+    await jail.set(name, ref, { reference: true });
   }
 
   /**
@@ -149,26 +152,35 @@ export class GraphRAGSandbox {
       this.logger.info('[Sandbox] Executing code...');
       this.logger.debug('[Sandbox] Code:', code.substring(0, 200));
 
-      // Compile the code
-      const script = await this.isolate.compileScript(code);
+      // Wrap code in async IIFE to support await and return statements
+      const wrappedCode = `(async () => { ${code} })()`;
 
-      // Execute with timeout
-      // Note: wrapped in async context to allow await in code
-      const wrappedCode = `
-        (async () => {
-          ${code}
-        })()
-      `;
-
+      // Compile and execute with timeout
       const wrappedScript = await this.isolate.compileScript(wrappedCode);
-      const result = await wrappedScript.run(this.context, { timeout });
-
-      // Copy result out of isolate (deep copy)
+      
+      // Run with promise support - this returns a Reference to the Promise
+      const promiseRef = await wrappedScript.run(this.context, { timeout, promise: true });
+      
+      // Await the promise to get the result Reference
+      const resultRef = await promiseRef;
+      
+      // Copy the result out of the isolate
       let copiedResult;
-      if (result && typeof result.copy === 'function') {
-        copiedResult = await result.copy();
-      } else {
-        copiedResult = result;
+      try {
+        if (resultRef && resultRef.copy) {
+          // It's a Reference - use copy() to extract the value
+          copiedResult = await resultRef.copy();
+        } else if (resultRef && resultRef.copySync) {
+          // Sync copy available
+          copiedResult = resultRef.copySync();
+        } else {
+          // Primitive value, can be used directly
+          copiedResult = resultRef;
+        }
+      } catch (copyError: any) {
+        // If copy fails, the value might be a primitive or undefined
+        this.logger.debug(`[Sandbox] Copy not needed for primitive: ${copyError.message}`);
+        copiedResult = resultRef;
       }
 
       const executionTime = Date.now() - startTime;
